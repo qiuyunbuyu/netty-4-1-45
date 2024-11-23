@@ -22,7 +22,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
-
+    // 包装的Selector优化点，用数组存SelectionKey
     SelectionKey[] keys;
     int size;
 
