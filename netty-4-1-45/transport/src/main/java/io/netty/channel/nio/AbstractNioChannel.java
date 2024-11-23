@@ -377,6 +377,11 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         boolean selected = false;
         for (;;) {
             try {
+                // 原始NIO：SelectionKey selectionKey = serverSocketChannel.register(selector, 0, null);
+                // javaChannel() -> serverSocketChannel
+                // eventLoop().unwrappedSelector() -> Selector
+                // 0 -> 此时先不关注事件
+                // this -> NioServerSocketChannel作为attachment绑定了 serverSocketChannel
                 selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
                 return;
             } catch (CancelledKeyException e) {
@@ -411,6 +416,8 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
         final int interestOps = selectionKey.interestOps();
         if ((interestOps & readInterestOp) == 0) {
+            // 给ServerSocketChannel设置关心OP_ACCEPT的方法
+            // selectionKey.interestOps(SelectionKey.OP_ACCEPT);
             selectionKey.interestOps(interestOps | readInterestOp);
         }
     }

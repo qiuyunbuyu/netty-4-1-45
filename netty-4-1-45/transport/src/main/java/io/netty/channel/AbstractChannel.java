@@ -464,9 +464,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             AbstractChannel.this.eventLoop = eventLoop;
 
+            // 判断线程是否是NIO线程？
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
+                // ssc初始化在main线程中，会走到此处，
                 try {
                     eventLoop.execute(new Runnable() {
                         @Override
@@ -493,14 +495,20 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
+                // 最核心的register
                 doRegister();
                 neverRegistered = false;
                 registered = true;
 
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
+
+                // 调用 ServerBootStrap中的 p.addLast(new ChannelInitializer<Channel>()
                 pipeline.invokeHandlerAddedIfNeeded();
 
+                // 给：io.netty.bootstrap.AbstractBootstrap.initAndRegister()中
+                // ChannelFuture regFuture = config().group().register(channel);
+                // 设置success结果
                 safeSetSuccess(promise);
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
@@ -525,6 +533,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         }
 
         @Override
+        // 最后bind走到这里
         public final void bind(final SocketAddress localAddress, final ChannelPromise promise) {
             assertEventLoop();
 
@@ -547,17 +556,20 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             boolean wasActive = isActive();
             try {
+                // doBind
                 doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
                 closeIfClosed();
                 return;
             }
-
+            // 判断bind端口之后的channel 是否 active and so connected ？
             if (!wasActive && isActive()) {
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {
+                        // 调用所有handler中channelActive方法
+                        // 此时：[head - accpet - tail ]
                         pipeline.fireChannelActive();
                     }
                 });

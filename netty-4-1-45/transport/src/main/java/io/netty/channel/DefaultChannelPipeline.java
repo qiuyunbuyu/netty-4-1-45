@@ -1395,8 +1395,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
+            // 调用下一个Handler的fireChannelActive方法
             ctx.fireChannelActive();
-
+            // 最后一直能调用到：AbstractNioChannel的doBeginRead()
             readIfIsAutoRead();
         }
 

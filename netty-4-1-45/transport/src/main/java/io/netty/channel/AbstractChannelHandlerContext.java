@@ -491,6 +491,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             safeExecute(executor, new Runnable() {
                 @Override
                 public void run() {
+                    // bind
                     next.invokeBind(localAddress, promise);
                 }
             }, promise, null, false);
@@ -501,6 +502,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeBind(SocketAddress localAddress, ChannelPromise promise) {
         if (invokeHandler()) {
             try {
+                // bind
                 ((ChannelOutboundHandler) handler()).bind(this, localAddress, promise);
             } catch (Throwable t) {
                 notifyOutboundHandlerException(t, promise);

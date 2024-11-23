@@ -59,6 +59,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
              *
              *  See <a href="https://github.com/netty/netty/issues/2308">#2308</a>.
              */
+            // jdk-ServerSocketChannel创建
             return provider.openServerSocketChannel();
         } catch (IOException e) {
             throw new ChannelException(
@@ -72,6 +73,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
      * Create a new instance
      */
     public NioServerSocketChannel() {
+        // 创建NioServerSocketChannel 内部 创建 ServerScoketChannel
         this(newSocket(DEFAULT_SELECTOR_PROVIDER));
     }
 
@@ -130,7 +132,10 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
     @SuppressJava6Requirement(reason = "Usage guarded by java version check")
     @Override
     protected void doBind(SocketAddress localAddress) throws Exception {
+        // 最后bind端口的地方：
+        // 原生NIO：serverSocketChannel.bind(new InetSocketAddress(8000));
         if (PlatformDependent.javaVersion() >= 7) {
+            // config.getBacklog() -> 全连接队列的大小
             javaChannel().bind(localAddress, config.getBacklog());
         } else {
             javaChannel().socket().bind(localAddress, config.getBacklog());

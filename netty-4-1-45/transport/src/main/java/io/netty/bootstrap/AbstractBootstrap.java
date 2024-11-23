@@ -261,6 +261,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        // ServerSocketChannel的创建入口 + 注册至Selector中
+        // 为啥返回一个Future？因为Selector是NioEventLoop(另一个线程管的)
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
         if (regFuture.cause() != null) {
@@ -270,6 +272,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
+            // ServerSocketChannel绑定端口的工作
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
@@ -299,7 +302,10 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
+            // 1. 创建NioServerSocketChannel, ReflectiveChannelFactory:利用反射创建
+            // NioServerSocketChannel的无参构造中创建了ServerScoketChannel
             channel = channelFactory.newChannel();
+            // 初始化NioServerSocketChannel，为ServerScoketChannel创建了一个ChannelInitializer
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -311,7 +317,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             // as the Channel is not registered yet we need to force the usage of the GlobalEventExecutor
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
-
+        // 2. 将ServerScoketChannel注册至Selector【异步了】
+        //                        EventLoopGroup
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
@@ -345,6 +352,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             @Override
             public void run() {
                 if (regFuture.isSuccess()) {
+                    // 绑定端口
                     channel.bind(localAddress, promise).addListener(ChannelFutureListener.CLOSE_ON_FAILURE);
                 } else {
                     promise.setFailure(regFuture.cause());
