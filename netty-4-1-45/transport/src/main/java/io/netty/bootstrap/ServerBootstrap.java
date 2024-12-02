@@ -122,9 +122,11 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
 
     @Override
     void init(Channel channel) {
+        // 1. 给channel设置参数
         setChannelOptions(channel, options0().entrySet().toArray(EMPTY_OPTION_ARRAY), logger);
         setAttributes(channel, attrs0().entrySet().toArray(EMPTY_ATTRIBUTE_ARRAY));
-        // 初始化pipeline
+
+        // 2. 初始化了一个pipeline
         ChannelPipeline p = channel.pipeline();
 
         final EventLoopGroup currentChildGroup = childGroup;
@@ -133,7 +135,8 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                 childOptions.entrySet().toArray(EMPTY_OPTION_ARRAY);
         final Entry<AttributeKey<?>, Object>[] currentChildAttrs = childAttrs.entrySet().toArray(EMPTY_ATTRIBUTE_ARRAY);
 
-        // 为ServerSocketChannel加了名为ChannelInitializer的ChannelHandler
+        // 3. 给上面新建的pipeline加了名为ChannelInitializer的ChannelHandler
+        // 并且其内部的initChannel如果被调用，会再加一个名为ServerBootstrapAcceptor(用于监听OP-ACCEPT)的InboudHandler
         p.addLast(new ChannelInitializer<Channel>() {
             // 此处定义的方法何时调用？AbstractChannel中的register0中 pipeline.invokeHandlerAddedIfNeeded() 调用的
             @Override

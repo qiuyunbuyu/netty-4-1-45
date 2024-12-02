@@ -261,14 +261,20 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
+        // **1.
         // ServerSocketChannel的创建入口 + 注册至Selector中
         // 为啥返回一个Future？因为Selector是NioEventLoop(另一个线程管的)
         final ChannelFuture regFuture = initAndRegister();
         final Channel channel = regFuture.channel();
+
+        // **2.
+        // 上面的initAndRegister()，最后会调到register0(ChannelPromise promise)，会设置异步结果
+        // 下面的步骤，会根据其异步操作结果来做
+        // case1：有异常
         if (regFuture.cause() != null) {
             return regFuture;
         }
-
+        // case2：
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
@@ -276,6 +282,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
+            // case3：
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
             regFuture.addListener(new ChannelFutureListener() {
@@ -303,9 +310,14 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         Channel channel = null;
         try {
             // 1. 创建NioServerSocketChannel, ReflectiveChannelFactory:利用反射创建
-            // NioServerSocketChannel的无参构造中创建了ServerScoketChannel
+            // 创建【NioServerSocketChannel】，同时在其无参构造中创建了【ServerScoketChannel】
+            // 对应原生NIO中：ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
             channel = channelFactory.newChannel();
-            // 初始化NioServerSocketChannel，为ServerScoketChannel创建了一个ChannelInitializer
+
+            // 1. 给上面的channel设置属性
+            // 2. 初始化ChannelPipeline
+            // 3. 在pipeline中创建了一个ChannelInitializer的Handler
+            // netty中特色抽象[channel <-> pipeline <-> handler]
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -318,7 +330,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
         // 2. 将ServerScoketChannel注册至Selector【异步了】
-        //                        EventLoopGroup
+        // config().group() = NioEventLoopGroup
+        // 对应Nio原生如下
+        // SelectionKey selectionKey = serverSocketChannel.register(selector, 0, null);
         ChannelFuture regFuture = config().group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {

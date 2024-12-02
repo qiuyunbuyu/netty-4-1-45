@@ -144,6 +144,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
         // NioEventLoop 构造方法中 进行Selector 初始化
         // openSelector
+        // 对应原生 nio : Selector selector = Selector.open();
         final SelectorTuple selectorTuple = openSelector();
         this.selector = selectorTuple.selector;
         this.unwrappedSelector = selectorTuple.unwrappedSelector;

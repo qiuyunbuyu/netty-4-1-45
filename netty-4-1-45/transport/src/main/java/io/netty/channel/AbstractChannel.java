@@ -461,15 +461,17 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                         new IllegalStateException("incompatible event loop type: " + eventLoop.getClass().getName()));
                 return;
             }
-
+            // 给channel设置eventloop(线程)
             AbstractChannel.this.eventLoop = eventLoop;
 
-            // 判断线程是否是NIO线程？
+            // 判断线程是否是NIO线程？ssc初始化在main线程中, 不会走这
             if (eventLoop.inEventLoop()) {
                 register0(promise);
             } else {
                 // ssc初始化在main线程中，会走到此处，
                 try {
+                    // 第一次execute会启动一个新的线程NioEventLoop，来执行register0(promise);
+                    // eventLoop是个单线程的线程池，后面再Execute也不会创建新线程了
                     eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -508,7 +510,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
                 // 给：io.netty.bootstrap.AbstractBootstrap.initAndRegister()中
                 // ChannelFuture regFuture = config().group().register(channel);
-                // 设置success结果
+                // 设置success结果，给初始化中第二部分使用
                 safeSetSuccess(promise);
                 pipeline.fireChannelRegistered();
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
@@ -557,12 +559,14 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             boolean wasActive = isActive();
             try {
                 // doBind
+                // 对应NIO中原生serverSocketChannel.bind(new InetSocketAddress(8000));
                 doBind(localAddress);
             } catch (Throwable t) {
                 safeSetFailure(promise, t);
                 closeIfClosed();
                 return;
             }
+            // 对应NIO原生：selectionKey.interestOps(SelectionKey.OP_ACCEPT);的入口
             // 判断bind端口之后的channel 是否 active and so connected ？
             if (!wasActive && isActive()) {
                 invokeLater(new Runnable() {
