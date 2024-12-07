@@ -524,6 +524,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 if (ioRatio == 100) { // 默认是不会走到这个分支的
                     try {
                         if (strategy > 0) {
+                            // 网络事件的处理入口
                             processSelectedKeys(); // 优先把网络IO任务处理完
                         }
                     } finally {
@@ -625,8 +626,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     * 处理网络事件的入口
+     */
     private void processSelectedKeys() {
-        if (selectedKeys != null) {
+        // SelectionKey -> “A token representing the registration of a SelectableChannel with a Selector.”
+        if (selectedKeys != null) { // 优化的分支
             processSelectedKeysOptimized();
         } else {
             processSelectedKeysPlain(selector.selectedKeys());
@@ -691,6 +696,13 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     * 对SelectionKey进行遍历
+     *     isAcceptable
+     *     isRead
+     *     isConnect
+     *     isWrite
+     */
     private void processSelectedKeysOptimized() {
         for (int i = 0; i < selectedKeys.size; ++i) {
             final SelectionKey k = selectedKeys.keys[i];
@@ -698,9 +710,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // See https://github.com/netty/netty/issues/2363
             selectedKeys.keys[i] = null;
 
+            // 取出附件,
+            // NioChannel
+            //      NioServerSocketChannel -> pipeline
+            //      NioSocketChannel -> pipeline
+            // 现在想想附件，就是将原生的ServerSocketChannel和netty自定义的NioServerSocketChannel，做一个绑定
             final Object a = k.attachment();
 
             if (a instanceof AbstractNioChannel) {
+                // 处理SelectedKey代表的网络事件
                 processSelectedKey(k, (AbstractNioChannel) a);
             } else {
                 @SuppressWarnings("unchecked")
@@ -719,8 +737,14 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     * “不同事件处理的模板代码”
+     * @param k 网络事件的SelectionKey
+     * @param ch SelectionKey的附件attachment
+     */
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
         final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
+        // SelectionKey 无效的情况的处理
         if (!k.isValid()) {
             final EventLoop eventLoop;
             try {

@@ -81,6 +81,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         this.ch = ch;
         this.readInterestOp = readInterestOp;
         try {
+            // 设置socketchannel为非阻塞
             ch.configureBlocking(false);
         } catch (IOException e) {
             try {
@@ -203,6 +204,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
 
         /**
          * Read from underlying {@link SelectableChannel}
+         * 有2个实现类：
+         *      NioByteUnsafe
+         *      NioMessageUnsafe
          */
         void read();
 
@@ -419,6 +423,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             // 初始化部分最后一步,,,
             // 给ServerSocketChannel设置关心OP_ACCEPT的方法
             // selectionKey.interestOps(SelectionKey.OP_ACCEPT);
+
+            // 给SocketChannel设置关心OP_READ的方法
+            // selectionKey.interestOps(SelectionKey.OP_READ);
             selectionKey.interestOps(interestOps | readInterestOp);
         }
     }

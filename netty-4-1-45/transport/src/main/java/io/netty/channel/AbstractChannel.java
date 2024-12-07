@@ -497,7 +497,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
-                // 最核心的register
+                // OP-ACCEPT事情处理目标2. SocketChannel注册到selector
+                // 最核心的register，ssc或sc注册selector的地方
                 doRegister();
                 neverRegistered = false;
                 registered = true;
@@ -505,7 +506,13 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // Ensure we call handlerAdded(...) before we actually notify the promise. This is needed as the
                 // user may already fire events through the pipeline in the ChannelFutureListener.
 
-                // 调用 ServerBootStrap中的 p.addLast(new ChannelInitializer<Channel>()
+                // 此处如果是firstRegistration，会调用pipeline中的Handler的init方法
+                // 注意分清此时的pipeline是ssc的pipeline还是sc的pipeline，2者的pipeline中的Handler是不一致的
+                // 如果是serversocketchannel的pipeline
+                //     会调用 ServerBootStrap中的 p.addLast(new ChannelInitializer<Channel>()来监听ACCEPT事件
+                // 如果是socketchannel的pipeline
+                //     会调用到用户在初始化设置时，自定义的添加Handler的逻辑
+                //     OP-ACCEPT事情处理目标3. firstRegistration时调用pipeline中的Handler的init方法来添加用户自定义Handler
                 pipeline.invokeHandlerAddedIfNeeded();
 
                 // 给：io.netty.bootstrap.AbstractBootstrap.initAndRegister()中
@@ -516,7 +523,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // Only fire a channelActive if the channel has never been registered. This prevents firing
                 // multiple channel actives if the channel is deregistered and re-registered.
                 if (isActive()) {
+                    // 此处如果是firstRegistration，会调用pipeline中的Handler的active方法来关心想关心的网络事件
                     if (firstRegistration) {
+                        // OP-ACCEPT事情处理目标 4. 一直调到AbstractNioChannel的doBeginRead()方法关心了OP_READ事件
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
                         // This channel was registered before and autoRead() is set. This means we need to begin read

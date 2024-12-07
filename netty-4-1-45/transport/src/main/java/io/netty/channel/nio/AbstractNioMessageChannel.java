@@ -62,16 +62,21 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
         @Override
         public void read() {
             assert eventLoop().inEventLoop();
+            // channel的配置
             final ChannelConfig config = config();
+            // channel对应的Pipeline
             final ChannelPipeline pipeline = pipeline();
+            // 分配receive buffer的
             final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
             allocHandle.reset(config);
 
             boolean closed = false;
             Throwable exception = null;
             try {
+                // # part1: **网络通信中经典的接bytes桥段。。。，把接到的东西保存在readBuf，以便下一步遍历使用
                 try {
                     do {
+                        // 如果是OP—ACCEPT走到这的，那么readBuf里面添加的是(NioSocketChannel-SocketChannel，与客户端连接)
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;
@@ -87,11 +92,17 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                     exception = t;
                 }
 
+                // OP-ACCEPT事情处理目标1. 取出SocketChannel
+                // # part2：pipeline对每一个NioSocketChannel执行fireChannelRead操做，把NioSocketChannel传给下一个Handler
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
                     readPending = false;
+                    // 把NioSocketChannel传给下一个Handler，下一个Handler是谁？
+                    // 此时的pipeline中有哪些Handler？[HeadContext - ServerBootstrapAcceptor - TailContext]
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
+
+                // # part3
                 readBuf.clear();
                 allocHandle.readComplete();
                 pipeline.fireChannelReadComplete();

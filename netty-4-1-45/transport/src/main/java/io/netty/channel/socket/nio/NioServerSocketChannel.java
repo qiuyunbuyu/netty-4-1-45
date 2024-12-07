@@ -149,10 +149,18 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
 
     @Override
     protected int doReadMessages(List<Object> buf) throws Exception {
+        // 创建原生的SocketChannel
         SocketChannel ch = SocketUtils.accept(javaChannel());
 
         try {
             if (ch != null) {
+                // 把SocketChannel包了一层 成netty自己的NioSocketChannel
+                    // 包的过程中会做如下的事情
+                    // 会设置SocketChannel为非阻塞
+                    // 设置AbstractNioChannel的readInterestOp设置为SelectionKey.OP_READ
+                    // （注意此处并不是关注了SelectionKey.OP_READ，只是表明我想关注SelectionKey.OP_READ）
+                // 这里的parent：this是谁？ NioServerSocketChannel
+                // 把NioSocketChannel保存在一个List集合中，可以理解成“把与客户端的连接一个个的NioSocketChannel保存了起来”
                 buf.add(new NioSocketChannel(this, ch));
                 return 1;
             }

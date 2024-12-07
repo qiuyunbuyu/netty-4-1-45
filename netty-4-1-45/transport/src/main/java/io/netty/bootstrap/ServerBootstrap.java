@@ -150,6 +150,7 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
                 ch.eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {
+                        // ServerBootstrapAcceptor被添加的地方
                         // 给pipeline中添加了一个ServerBootstrapAcceptor： 专门用于监听ACCEPT事件
                         // 此时pipeLine中共3个Handler: [head - "ServerBootstrapAcceptor" - tail]
                         pipeline.addLast(new ServerBootstrapAcceptor(
@@ -205,14 +206,17 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
         @Override
         @SuppressWarnings("unchecked")
         public void channelRead(ChannelHandlerContext ctx, Object msg) {
+            // 取到了NioSocketChannel
             final Channel child = (Channel) msg;
 
+            // 找到处理SocketChannel的pipeline，并添加childHandler
             child.pipeline().addLast(childHandler);
 
             setChannelOptions(child, childOptions, logger);
             setAttributes(child, childAttrs);
 
             try {
+                // childGroup.register(child) 最后又会走到 AbstractChannel的register方法中 -> register0 -> doRegister() -> 来完成socketchannel对Selector的注册
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {
