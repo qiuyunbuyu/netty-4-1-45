@@ -42,8 +42,8 @@ public interface SelectStrategy {
      * The {@link SelectStrategy} can be used to steer the outcome of a potential select
      * call.
      *
-     * @param selectSupplier The supplier with the result of a select result.
-     * @param hasTasks true if tasks are waiting to be processed.
+     * @param selectSupplier The supplier with the result of a select result. | selectNow()
+     * @param hasTasks true if tasks are waiting to be processed. | 是否有普通任务
      * @return {@link #SELECT} if the next step should be blocking select {@link #CONTINUE} if
      *         the next step should be to not select but rather jump back to the IO loop and try
      *         again. Any value >= 0 is treated as an indicator that work needs to be done.

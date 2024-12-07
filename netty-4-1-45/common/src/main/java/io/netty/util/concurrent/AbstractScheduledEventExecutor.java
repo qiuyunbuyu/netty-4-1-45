@@ -42,7 +42,8 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
        @Override
        public void run() { } // Do nothing
     };
-    // 定时任务
+    // EventLoop父类
+    // 定时任务队列
     PriorityQueue<ScheduledFutureTask<?>> scheduledTaskQueue;
 
     long nextTaskId;
@@ -148,6 +149,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
      * if no task is scheduled.
      */
     protected final long nextScheduledTaskDeadlineNanos() {
+        // 取出第一个定时任务
         ScheduledFutureTask<?> scheduledTask = peekScheduledTask();
         return scheduledTask != null ? scheduledTask.deadlineNanos() : -1;
     }

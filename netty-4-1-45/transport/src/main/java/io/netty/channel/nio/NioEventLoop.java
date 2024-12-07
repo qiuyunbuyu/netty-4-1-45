@@ -378,6 +378,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         return selector.keys().size() - cancelledKeys;
     }
 
+    /**
+     * 重建Selector，可不是直接open一个出来就好的，复杂的不行。。。
+     * 要处理新旧Selector中相关数据的复制，交替。。
+     */
     private void rebuildSelector0() {
         final Selector oldSelector = selector;
         final SelectorTuple newSelectorTuple;
@@ -440,14 +444,27 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
     }
 
+    /**
+     * 一个Run方法里要同时处理3类事件
+     * 1. 网络事件处理
+     * 2. 普通任务处理
+     * 3. 定时任务处理
+     *
+     * 其中网络事件select操作还是阻塞的（selector.select(), 没有网络事件时）
+     * 这怎么解决的？阻塞的时候，提交了一个普通/定时任务咋办..
+     */
     @Override
     protected void run() {
         int selectCnt = 0;
         for (;;) {
             try {
+                // part1： 执行哪个任务的问题，权衡网络IO任务和普通任务及定时任务执行哪个的问题
                 int strategy;
                 try {
+                    // 根据strategy返回值计算走下面哪个分支
                     strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
+
+                    // 无普通任务，下面分支一个都不会走，因为有普通任务，strategy必然 >= 0，下面case全是负数
                     switch (strategy) {
                     case SelectStrategy.CONTINUE:
                         continue;
@@ -455,14 +472,25 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                     case SelectStrategy.BUSY_WAIT:
                         // fall-through to SELECT since the busy-wait is not supported with NIO
 
+                    // 无普通任务走到这个分支
                     case SelectStrategy.SELECT:
+                        // 走到这里代表select的阻塞，不会影响普通任务了，但还要考虑是否会影响定时任务
+                        // 下一个定时任务的deadline时间
                         long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
+
+                        // 没定时任务，curDeadlineNanos就设置为Long.MAX_VALUE
                         if (curDeadlineNanos == -1L) {
-                            curDeadlineNanos = NONE; // nothing on the calendar
+                            curDeadlineNanos = NONE; // nothing on the calendar "日历上没有,,,"
                         }
+                        // 更新下一次wake时间
                         nextWakeupNanos.set(curDeadlineNanos);
                         try {
-                            if (!hasTasks()) {
+                            // 没有定时任务，就能执行一把“阻塞的select,直到获取网络事件”
+                            // 阻塞的select有2个方法：
+                            // 1. select()
+                            // 2. select(long timeout)
+                            if (!hasTasks()) { // 再次确认无普通任务
+                                // 此时strategy值为 selector.select 就绪的网络事件的数量
                                 strategy = select(curDeadlineNanos);
                             }
                         } finally {
@@ -482,33 +510,49 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                     continue;
                 }
 
+            // part2： 任务执行及执行时间分配的问题
+            // 原则是：
+            // 1. 网络io操作，不管花多久 一定要都完成
+            // 2. 普通定时任务操作的执行事件按照ioRatio来调节，到了时间结束 即使没有做完也结束
                 selectCnt++;
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
                 final int ioRatio = this.ioRatio;
                 boolean ranTasks;
-                if (ioRatio == 100) {
+
+                // 根据ioRatio值判断，默认ioRatio 50
+                if (ioRatio == 100) { // 默认是不会走到这个分支的
                     try {
                         if (strategy > 0) {
-                            processSelectedKeys();
+                            processSelectedKeys(); // 优先把网络IO任务处理完
                         }
                     } finally {
-                        // Ensure we always run tasks.
+                        // Ensure we always run tasks. // 处理普通任务 + 可以被执行的定时任务
                         ranTasks = runAllTasks();
                     }
                 } else if (strategy > 0) {
+                    // 当前执行网络IO任务的启动时间点
                     final long ioStartTime = System.nanoTime();
                     try {
-                        processSelectedKeys();
+                        processSelectedKeys(); // 优先把网络IO任务处理完
                     } finally {
                         // Ensure we always run tasks.
+                        // 处理网络IO任务花费的时间 = 执行完网络IO任务的时间点 - 启动时间点
                         final long ioTime = System.nanoTime() - ioStartTime;
+
+                        // "ioTime * (100 - ioRatio) / ioRatio" 是啥含义？
+                        // 目标是：根据网络IO执行的时间以及ioRatio，计算出“普通/定时任务能被执行多久”
+                        // ioRatio可以被任务是调节的比例
+                        // 如果ioRatio是80：那么如果网络IO事件处理事件是8S [80%], 那么普通定时任务，可以被执行 2S [20%]， 没处理完所有任务，就下次再说
+                        // 默认ioRatio是50：就意味着网络IO事件处理事件是8S [50%], 那么普通定时任务，可以被执行 8S [50%]， 没处理完所有任务，就下次再说
                         ranTasks = runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
                 } else {
                     ranTasks = runAllTasks(0); // This will run the minimum number of tasks
                 }
 
+                // part3：一次循环结束前的收尾处理
+                // selectCnt用于辅助处理Selector.select()在linux上空转的问题
                 if (ranTasks || strategy > 0) {
                     if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS && logger.isDebugEnabled()) {
                         logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",
@@ -558,6 +602,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
         if (SELECTOR_AUTO_REBUILD_THRESHOLD > 0 &&
                 selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) {
+            // selectCnt 数量短时间内达到了512，则代表出现了Selector.select()空转的问题了，需要“重建selector”
             // The selector returned prematurely many times in a row.
             // Rebuild the selector to work around the problem.
             logger.warn("Selector.select() returned prematurely {} times in a row; rebuilding Selector {}.",
@@ -807,12 +852,26 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         return selector.selectNow();
     }
 
+    /**
+     * @param deadlineNanos 决定select阻塞多久
+     * @return selector.select 就绪的网络事件的数量
+     * @throws IOException
+     */
     private int select(long deadlineNanos) throws IOException {
+        // 这里就代表，又没有定时任务，也没有阻塞任务
         if (deadlineNanos == NONE) {
+            // 一直阻塞，直到达到退出条件
+            // 条件1：至少有一个网络事件就绪了
+            // 条件2： Selector wakeup()
+            // 条件3：Thread.currentThread().interrupt()
             return selector.select();
         }
+
+        // 走到这里就是代表有定时任务，你Selector阻塞归阻塞，别影响了定时任务
         // Timeout will only be 0 if deadline is within 5 microsecs
+        // 1ms = 1000000ns
         long timeoutMillis = deadlineToDelayNanos(deadlineNanos + 995000L) / 1000000L;
+        // 阻塞到定时任务的deadline
         return timeoutMillis <= 0 ? selector.selectNow() : selector.select(timeoutMillis);
     }
 

@@ -73,10 +73,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private static final AtomicReferenceFieldUpdater<SingleThreadEventExecutor, ThreadProperties> PROPERTIES_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(
                     SingleThreadEventExecutor.class, ThreadProperties.class, "threadProperties");
-    // 任务队列
+
+    // EventLoop父类中中任务队列
     private final Queue<Runnable> taskQueue;
-    // 线程
+    // NIO线程
     private volatile Thread thread;
+
     @SuppressWarnings("unused")
     private volatile ThreadProperties threadProperties;
     private final Executor executor;
@@ -281,11 +283,14 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         }
         long nanoTime = AbstractScheduledEventExecutor.nanoTime();
         for (;;) {
+            // 取出可以被执行的定时任务的Runnable
             Runnable scheduledTask = pollScheduledTask(nanoTime);
             if (scheduledTask == null) {
                 return true;
             }
+            // 把上面捞出来的定时任务的Runnable，放入普通任务的taskQueue
             if (!taskQueue.offer(scheduledTask)) {
+                // 没空间了，放回去...
                 // No space left in the task queue add it back to the scheduledTaskQueue so we pick it up again.
                 scheduledTaskQueue.add((ScheduledFutureTask<?>) scheduledTask);
                 return false;
@@ -372,6 +377,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         boolean fetchedAll;
         boolean ranAtLeastOne = false;
 
+        // 把所有可以被执行的定时任务，放入taskQueue
         do {
             fetchedAll = fetchFromScheduledTaskQueue();
             if (runAllTasksFrom(taskQueue)) {
@@ -382,6 +388,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         if (ranAtLeastOne) {
             lastExecutionTime = ScheduledFutureTask.nanoTime();
         }
+
+        // 执行taskQueue中的所有任务
         afterRunningAllTasks();
         return ranAtLeastOne;
     }
@@ -558,6 +566,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     @Override
     public boolean inEventLoop(Thread thread) {
+        // 判断是否是NIO线程
+        // 就是判断 [当前线程 Thread.currentThread() ] 和 [EventLoop中thread成员变量] 是否相等
         return thread == this.thread;
     }
 
@@ -823,10 +833,17 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
         execute(ObjectUtil.checkNotNull(task, "task"), false);
     }
 
+    /**
+     * @param task
+     * @param immediate
+     */
     private void execute(Runnable task, boolean immediate) {
+        // 判断是否是NIO线程
         boolean inEventLoop = inEventLoop();
+        // 添加到taskQueue中
         addTask(task);
         if (!inEventLoop) {
+            // 启动NIO线程逻辑
             startThread();
             if (isShutdown()) {
                 boolean reject = false;
@@ -940,10 +957,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private static final long SCHEDULE_PURGE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
 
     private void startThread() {
+        // 状态判断：保证只创建一次
         if (state == ST_NOT_STARTED) {
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
                 boolean success = false;
                 try {
+                    // 起NIOEventLoop线程线程
                     doStartThread();
                     success = true;
                 } finally {
@@ -975,9 +994,11 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void doStartThread() {
         assert thread == null;
+        // 创建NIOEventLoop线程
         executor.execute(new Runnable() {
             @Override
             public void run() {
+                // 此时当前线程线程就是 NIOEventLoop线程了
                 thread = Thread.currentThread();
                 if (interrupted) {
                     thread.interrupt();
@@ -986,6 +1007,7 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
+                    // 实际干的活
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {

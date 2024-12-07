@@ -20,12 +20,15 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
 import java.util.Set;
-
+// 原生Selector + 优化的数组存SelectionKey = 包装的Selector...
 final class SelectedSelectionKeySetSelector extends Selector {
-    //
+    // 优化点 用数组存SelectionKey
     private final SelectedSelectionKeySet selectionKeys;
+    // 未包装的原生的Selector：unwrappedSelector
     private final Selector delegate;
 
+    // EventLoop初始化中
+    // new SelectedSelectionKeySetSelector(unwrappedSelector, selectedKeySet)
     SelectedSelectionKeySetSelector(Selector delegate, SelectedSelectionKeySet selectionKeys) {
         this.delegate = delegate;
         this.selectionKeys = selectionKeys;
