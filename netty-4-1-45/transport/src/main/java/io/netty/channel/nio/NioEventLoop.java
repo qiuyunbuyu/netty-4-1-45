@@ -788,6 +788,10 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
             // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
             // to a spin loop
+            // OP_READ 和 OP_ACCEPT事件处理在同一个入口
+            // 但是从Debug来看
+            // OP_ACCEPT 是被 AbstractNioMessageChannel 的 read() 处理的
+            // OP_READ 是被 AbstractNioByteChannel 的 read() 处理的， （客户端发送的byte情况下）
             if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
                 unsafe.read();
             }

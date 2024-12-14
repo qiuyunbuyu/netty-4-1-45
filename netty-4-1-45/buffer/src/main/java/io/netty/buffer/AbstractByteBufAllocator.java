@@ -135,9 +135,16 @@ public abstract class AbstractByteBufAllocator implements ByteBufAllocator {
 
     @Override
     public ByteBuf ioBuffer(int initialCapacity) {
+        // 直接内存(默认)
+        // PlatformDependent.hasUnsafe(): 判断类路径有没有sun.misc.Unsafe，能操作系统的底层资源
+        //          直接内存池，CAS都是用的Unsafe....
+        // 由于现在JDK都带这个，所以，所以默认都是直接内存
+        //
+        // isDirectBufferPooled()： 默认是池化的
         if (PlatformDependent.hasUnsafe() || isDirectBufferPooled()) {
             return directBuffer(initialCapacity);
         }
+        // 堆内存
         return heapBuffer(initialCapacity);
     }
 

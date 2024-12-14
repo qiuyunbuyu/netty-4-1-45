@@ -1026,6 +1026,7 @@ public final class PlatformDependent {
         }
 
         try {
+            // 判断类路径有没有sun.misc.Unsafe
             boolean hasUnsafe = PlatformDependent0.hasUnsafe();
             logger.debug("sun.misc.Unsafe: {}", hasUnsafe ? "available" : "unavailable");
             return hasUnsafe ? null : PlatformDependent0.getUnsafeUnavailabilityCause();

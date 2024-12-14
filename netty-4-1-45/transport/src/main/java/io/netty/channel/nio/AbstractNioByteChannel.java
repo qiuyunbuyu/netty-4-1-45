@@ -128,24 +128,55 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
             }
         }
 
+        /**
+         * 我们在OP-ACCEPT网络事件处理的时候，读的是 AbstractNioMessageChannel里面的read()方法
+         * 此处是AbstractNioByteChannel，用于处理bytes的
+         * netty里面针对 message 和 byte 2类数据，是走的不同的处理体系
+         */
         @Override
         public final void read() {
+            // 配置相关
             final ChannelConfig config = config();
             if (shouldBreakReadReady(config)) {
                 clearReadPending();
                 return;
             }
+
+            // 拿到channel对应的pipeline，channel本质还是由pipeline处理的
             final ChannelPipeline pipeline = pipeline();
+
+            // 内存分配器：池化/非池化
             final ByteBufAllocator allocator = config.getAllocator();
+            // 也是为了分配内存的，定义了Receive所需的ByteBuffer大小
             final RecvByteBufAllocator.Handle allocHandle = recvBufAllocHandle();
             allocHandle.reset(config);
 
             ByteBuf byteBuf = null;
             boolean close = false;
             try {
+                // 循环读取数据存入buffer中
+                // 1. 为啥要循环？
+                // 防止客户端的数据传过来的数据，分配的byteBuf一次无法读完
+                // 2. pipeline.fireChannelRead(byteBuf); 在循环里面，被调多次，有影响吗？
+                // 假设客户端传了100byte，byteBuf分了40byte的大小，那就得循环3次，往下个Handler传，下一个Handler自己来处理"封帧"的问题
                 do {
+                    /**
+                     * Creates a new receive buffer
+                     * whose capacity is probably large enough to read all inbound data
+                     * and small enough not to waste its space.
+                     *
+                     * 1. 创建一个大小足够合适的buffer来处理 inbound 数据
+                     * 一定会涉及内存的分配与管理
+                     *
+                     * 1. 决定ByteBuf 用的是直接内存 还是 堆内存 ？（直接内存）
+                     * 2. 自适应的ByteBuf 动态的调整大小 ？（大 小）
+                     */
                     byteBuf = allocHandle.allocate(allocator);
+
+                    // 2. 读数据放入byteBuf中，这步执行完，就完成“部分”或全量数据的读取了
                     allocHandle.lastBytesRead(doReadBytes(byteBuf));
+
+                    // 3. 已经不能从socketchannel里面读不出数据了，释放掉byteBuf空间
                     if (allocHandle.lastBytesRead() <= 0) {
                         // nothing was read. release the buffer.
                         byteBuf.release();
@@ -158,13 +189,21 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                         break;
                     }
 
+                    // 循环的次数 + 1, 判断是否需要
                     allocHandle.incMessagesRead(1);
                     readPending = false;
+
+                    // * 把byteBuf，传给下一个Handler的read方法，下一个Handler首先要解决针对这个byteBuf的封帧，半包粘包的问题
                     pipeline.fireChannelRead(byteBuf);
+
+                    // 为啥要设置成null？
+                    // "在循环的开始，byteBuf 会被重新分配一个新的缓冲区，这是因为在上一次循环中使用的 byteBuf 已经被传递给管道（pipeline）中的下一个处理器（handler），并且可能已经被修改或释放。" +
+                    // "将 byteBuf 设置为 null 确保了在下一次迭代中，allocHandle.allocate(allocator) 能够分配一个新的缓冲区，而不是重新使用可能已经被释放的旧缓冲区。"
                     byteBuf = null;
-                } while (allocHandle.continueReading());
+                } while (allocHandle.continueReading()); // 循环啥时候结束？
 
                 allocHandle.readComplete();
+                // 读完的时候触发下一个Handler的readcomplete方法
                 pipeline.fireChannelReadComplete();
 
                 if (close) {

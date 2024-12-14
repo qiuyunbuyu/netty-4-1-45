@@ -95,6 +95,11 @@ public abstract class DefaultMaxMessagesRecvByteBufAllocator implements MaxMessa
         private final UncheckedBooleanSupplier defaultMaybeMoreSupplier = new UncheckedBooleanSupplier() {
             @Override
             public boolean get() {
+                // attemptedBytesRead： 等于 ByteBuf的可写容量（第一次 就是总容量）
+                // lastBytesRead： 最后一次实际读到的数据
+
+                // true  当前这个读到的数据  把 ByteBuf写满了         --->  后许还得读
+                // false 当前这个读到的数据  把 ByteBuf没有写满了  ---> 读完事了
                 return attemptedBytesRead == lastBytesRead;
             }
         };
@@ -111,6 +116,8 @@ public abstract class DefaultMaxMessagesRecvByteBufAllocator implements MaxMessa
 
         @Override
         public ByteBuf allocate(ByteBufAllocator alloc) {
+            // ioBuffer -> 内存类型
+            // guess -> 猜大小
             return alloc.ioBuffer(guess());
         }
 
@@ -139,6 +146,14 @@ public abstract class DefaultMaxMessagesRecvByteBufAllocator implements MaxMessa
 
         @Override
         public boolean continueReading(UncheckedBooleanSupplier maybeMoreDataSupplier) {
+            // 4个都为true，就还得继续读
+
+            // 1.config.isAutoRead()  ----> true
+            // 2. 如果 ByteBuf 写满了，代表大概率没读完，还得继续读，如果ByteBuf没写满 -> 不用读了
+            // 3. do while 最多执行 16次   如果达到16次  -> false 不读了
+            //  16次如果没有完成处理，那么退出 但是 select继续监听read  可以下一次再搞
+            //  为什么要限定读的次数？IO操作 数据量比较大 占用线程时间长，打断一下，让这个线程可以为别的任务 服务一下
+            // 4. totalBytesRead > 0 正常读取情况都是永真
             return config.isAutoRead() &&
                    (!respectMaybeMoreData || maybeMoreDataSupplier.get()) &&
                    totalMessages < maxMessagePerRead &&

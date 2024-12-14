@@ -38,17 +38,34 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
     static final int DEFAULT_INITIAL = 1024;
     static final int DEFAULT_MAXIMUM = 65536;
 
+    //    确定所处位置
+    //    size = 16  ---> 0   sizeTable[0]
+    //    size = 50  ----> 2  sizeTable[2]
+    //
+    //    扩容场景：
+    //    当前 32 ---> 1 + 4
+    //    扩容   96
+    //    ---
+    //    缩容场景
+    //    当前 32 --> 1-1
+    //    缩容   16
+
+    // 扩容偏移量
     private static final int INDEX_INCREMENT = 4;
+    // 缩容偏移量
     private static final int INDEX_DECREMENT = 1;
 
     private static final int[] SIZE_TABLE;
 
     static {
+//        扩容池   byte， 为扩容所准备的大小，只能是这个大小
+//        16 32 48 64 ..80  96. .  512
         List<Integer> sizeTable = new ArrayList<Integer>();
         for (int i = 16; i < 512; i += 16) {
             sizeTable.add(i);
         }
 
+//        512  1024 2048  .....   Integer.Max/2
         for (int i = 512; i > 0; i <<= 1) {
             sizeTable.add(i);
         }
@@ -65,6 +82,11 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
     @Deprecated
     public static final AdaptiveRecvByteBufAllocator DEFAULT = new AdaptiveRecvByteBufAllocator();
 
+    /**
+     * @param size 想要的size
+     * @return 我能实际按你的想要的size，最接近的上面的16 * N 的size 对应的索引
+     * 比如 想要 15， 内存池里最接近的是16， 对应的索引是 0
+     */
     private static int getSizeTableIndex(final int size) {
         for (int low = 0, high = SIZE_TABLE.length - 1;;) {
             if (high < low) {
@@ -104,13 +126,26 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
             nextReceiveBufferSize = SIZE_TABLE[index];
         }
 
+        /**
+         * OP_READ处理过程中调用了此方法
+         * allocHandle.lastBytesRead(doReadBytes(byteBuf));
+         *
+         * @param bytes The number of bytes from the previous read operation. This may be negative if an read error
+         * occurs. If a negative value is seen it is expected to be return on the next call to
+         * {@link #lastBytesRead()}. A negative value will signal a termination condition enforced externally
+         * to this class and is not required to be enforced in {@link #continueReading()}.
+         */
         @Override
         public void lastBytesRead(int bytes) {
             // If we read as much as we asked for we should check if we need to ramp up the size of our next guess.
             // This helps adjust more quickly when large amounts of data is pending and can avoid going back to
             // the selector to check for more data. Going back to the selector can add significant latency for large
             // data transfers.
+            //  读入的 bytes == ByteBuf的大小(attemptedBytesRead())，代表2件事情
+            //   1. 还有数据没有读完
+            //   2. ByteBuf大小 不够 ---> 扩容
             if (bytes == attemptedBytesRead()) {
+                // 实际扩缩容
                 record(bytes);
             }
             super.lastBytesRead(bytes);
@@ -118,19 +153,30 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
 
         @Override
         public int guess() {
+            // 每一次结合我们接受的数据 ，猜测出下一次 ByteBuf的大小
             return nextReceiveBufferSize;
         }
 
+        /**
+         * 目标是啥？
+         * 根据actualReadBytes，此次实际读到的bytes大小
+         * 来决定下一次分配多少bytes的内存，来接收数据，也就是确定nextReceiveBufferSize的值
+         */
         private void record(int actualReadBytes) {
+            // SIZE_TABLE[max(0, index - INDEX_DECREMENT)]: 初始512bytes
             if (actualReadBytes <= SIZE_TABLE[max(0, index - INDEX_DECREMENT)]) {
+                // 2次不满足才会缩容
                 if (decreaseNow) {
+                    // 移动index，这里的max保证你缩容归缩容，但是保证不低于设定的最小值16bytes
                     index = max(index - INDEX_DECREMENT, minIndex);
+                    // 确定nextReceiveBufferSize
                     nextReceiveBufferSize = SIZE_TABLE[index];
                     decreaseNow = false;
                 } else {
                     decreaseNow = true;
                 }
-            } else if (actualReadBytes >= nextReceiveBufferSize) {
+            } else if (actualReadBytes >= nextReceiveBufferSize) { // 扩容
+                // min保证，扩容但是不超过最大值
                 index = min(index + INDEX_INCREMENT, maxIndex);
                 nextReceiveBufferSize = SIZE_TABLE[index];
                 decreaseNow = false;
