@@ -305,6 +305,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
 
     @Override
     protected final Object filterOutboundMessage(Object msg) {
+        // msg类型1：ByteBuf处理
         if (msg instanceof ByteBuf) {
             ByteBuf buf = (ByteBuf) msg;
             if (buf.isDirect()) {
@@ -313,7 +314,7 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
 
             return newDirectBuffer(buf);
         }
-
+        // msg类型2：FileRegion直接返回
         if (msg instanceof FileRegion) {
             return msg;
         }

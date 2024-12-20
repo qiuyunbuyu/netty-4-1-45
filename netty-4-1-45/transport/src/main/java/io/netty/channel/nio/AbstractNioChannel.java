@@ -446,6 +446,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
      * but just returns the original {@link ByteBuf}..
      */
     protected final ByteBuf newDirectBuffer(ByteBuf buf) {
+        // readableBytes == 0，直接释放掉了
         final int readableBytes = buf.readableBytes();
         if (readableBytes == 0) {
             ReferenceCountUtil.safeRelease(buf);
@@ -453,6 +454,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         }
 
         final ByteBufAllocator alloc = alloc();
+        // 如果内存分配器是【池化】+【直接内存】的分配器 -> 直接转成直接内存
         if (alloc.isDirectBufferPooled()) {
             ByteBuf directBuf = alloc.directBuffer(readableBytes);
             directBuf.writeBytes(buf, buf.readerIndex(), readableBytes);
@@ -460,13 +462,20 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             return directBuf;
         }
 
+        // 走到这里，代表使用的内存分配器，要么【不是池化】，要么【不是直接内存】的(肯定的)
+        // 所以这里就是针对【非池化的直接内存】场景下，查看是不是可以使用直接内存的另一种使用方式：”cached thread-local direct buffer“
+        // ThreadLocal Stack 对象池：可以理解成【线程级别】的【池化的】【直接内存】
         final ByteBuf directBuf = ByteBufUtil.threadLocalDirectBuffer();
         if (directBuf != null) {
             directBuf.writeBytes(buf, buf.readerIndex(), readableBytes);
             ReferenceCountUtil.safeRelease(buf);
             return directBuf;
         }
-
+        // netty种直接内存使用有2种方式：
+        // 1. 池化的直接内存
+        // 2. ”cached thread-local direct buffer“
+        // 你要是这2种都没有，那就用不了直接内存了，因为申请直接内存太慢了，比申请堆内存慢10倍
+        // 走到这里，就放弃吧---
         // Allocating and deallocating an unpooled direct buffer is very expensive; give up.
         return buf;
     }

@@ -33,6 +33,11 @@ public final class DefaultMessageSizeEstimator implements MessageSizeEstimator {
             this.unknownSize = unknownSize;
         }
 
+        /**
+         * 计算msg的大小
+         * @param msg       The message for which the size should be calculated
+         * @return
+         */
         @Override
         public int size(Object msg) {
             if (msg instanceof ByteBuf) {
@@ -41,6 +46,12 @@ public final class DefaultMessageSizeEstimator implements MessageSizeEstimator {
             if (msg instanceof ByteBufHolder) {
                 return ((ByteBufHolder) msg).content().readableBytes();
             }
+            // Q: 为啥FileRegion直接返回0了？
+            // A: 首先要明确目的，为啥要算msg的大小，我们计算msg的大小的目的是要计算此msg占用JVM内存占据的大小
+            // FileRegion类型并不使用堆内存
+
+            // Q: 那ByteBuf也有可能是使用的直接内存，为啥还返回了size？
+            // A: ByteBuf仅从存储的角度看，是使用的直接内存存储，但是如果涉及到一些逻辑运算，校验，还是会加载到堆内存中
             if (msg instanceof FileRegion) {
                 return 0;
             }

@@ -71,7 +71,10 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     protected AbstractChannel(Channel parent) {
         this.parent = parent;
         id = newId();
+        // channel处理的2个助手
+        // 创建了Unsafe：IO读写
         unsafe = newUnsafe();
+        // 创建了pipeline：处理逻辑
         pipeline = newChannelPipeline();
     }
 
@@ -877,10 +880,16 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
         }
 
+        /**
+         * write涉及的核心方法：写入outboundBuffer
+         * @param msg
+         * @param promise
+         */
         @Override
         public final void write(Object msg, ChannelPromise promise) {
+            // 判断是否是EventLoop线程
             assertEventLoop();
-
+            // 调用write写出的数据 都会存储在outboundBuffer ---> 链表
             ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
             if (outboundBuffer == null) {
                 // If the outboundBuffer is null we know the channel was closed and so
@@ -895,7 +904,16 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
 
             int size;
             try {
+                // a. 对输出数据msg进行判断处理，判断啥，处理啥？
+//                1 判断此时msg是ByteBuf还是FileRegion
+//                2. 如果msg是ByteBuf则判断 ByteBuf 是不是直接内存，如果不是直接内存，会转成直接内存
+//                        为啥非要想转成直接内存，为了”零拷贝“，直接使用内核态空间的内存，省一次拷贝
+//                3. msg是FileRegion则直接返回
+//                4. msg是2种类型之外的，直接抛内存
                 msg = filterOutboundMessage(msg);
+
+                // b. 计算msg的大小
+                // 为啥要计算msg大小？与设置的“高水位线”进行对比
                 size = pipeline.estimatorHandle().size(msg);
                 if (size < 0) {
                     size = 0;
@@ -905,30 +923,40 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 ReferenceCountUtil.release(msg);
                 return;
             }
-
+            // c. 把msg存入outboundBuffer
+            // 把需要输出的数据 存储在 OutboundBuffer ---》 数据 状态 unflush
+            // 要有防止堆积设计
             outboundBuffer.addMessage(msg, size, promise);
         }
 
+        /**
+         * write涉及的核心方法：从outboundBuffer缓冲区中的数据写入socket缓冲区
+         */
         @Override
         public final void flush() {
             assertEventLoop();
-
+            // 1. 取到outboundBuffer
             ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
             if (outboundBuffer == null) {
                 return;
             }
 
+            // 2. 把这个缓冲区（outboundBuffer)中的数据的【状态】标识成【flush状态】
             outboundBuffer.addFlush();
+
+            // 3. 从 ChanneOutboundBuffer中获取 flush状态的Entry(数据), 来开始调用JDK-NIO的原生能力来处理
             flush0();
         }
 
         @SuppressWarnings("deprecation")
         protected void flush0() {
+            // 校验的，flush0过程中，就别接着调flush0了
             if (inFlush0) {
                 // Avoid re-entrance
                 return;
             }
 
+            // 拿到数据缓冲区
             final ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
             if (outboundBuffer == null || outboundBuffer.isEmpty()) {
                 return;
@@ -952,6 +980,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
             }
 
             try {
+                // 真正的核心方法 | ”Flush the content of the given buffer to the remote peer.“
+                // 调用实现类NioSocketChannel中的doWrite方法
                 doWrite(outboundBuffer);
             } catch (Throwable t) {
                 if (t instanceof IOException && config().isAutoClose()) {
