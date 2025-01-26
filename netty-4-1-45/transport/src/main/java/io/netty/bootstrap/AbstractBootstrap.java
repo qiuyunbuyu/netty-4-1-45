@@ -274,7 +274,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         if (regFuture.cause() != null) {
             return regFuture;
         }
-        // case2：
+
+        // ↓ Selector/SSC 初始化好并且完成绑定之后(准备工作)，才会执行后续 端口bind + 事件关注(后续工作)
+        // 上述 “准备工作” 立即完成的情况
         if (regFuture.isDone()) {
             // At this point we know that the registration was complete and successful.
             ChannelPromise promise = channel.newPromise();
@@ -282,7 +284,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             doBind0(regFuture, channel, localAddress, promise);
             return promise;
         } else {
-            // case3：
+            // 上述 “准备工作” 没有立即完成的情况，异步调用进行 doBind0
             // Registration future is almost always fulfilled already, but just in case it's not.
             final PendingRegistrationPromise promise = new PendingRegistrationPromise(channel);
             regFuture.addListener(new ChannelFutureListener() {
@@ -306,11 +308,18 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         }
     }
 
+    /**
+     * * 完成2件事情
+     * 1. NioSSC + SSC的创建
+     * 2. 将SSC注册至Selector(不关注网络事件)
+     * 返回是ChannelFuture，是因为第二步注册是异步的
+     */
     final ChannelFuture initAndRegister() {
+
         Channel channel = null;
         try {
             // 1. 创建NioServerSocketChannel, ReflectiveChannelFactory:利用反射创建
-            // 创建【NioServerSocketChannel】，同时在其无参构造中创建了【ServerScoketChannel】
+            // * 创建【NioServerSocketChannel】，同时在其无参构造中创建了【ServerScoketChannel】
             // 对应原生NIO中：ServerSocketChannel serverSocketChannel = ServerSocketChannel.open();
             channel = channelFactory.newChannel();
 
@@ -329,8 +338,10 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             // as the Channel is not registered yet we need to force the usage of the GlobalEventExecutor
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
+
+
         // 2. 将ServerScoketChannel注册至Selector【异步了】
-        // config().group() = NioEventLoopGroup
+        // config().group() = MultithreadEventLoopGroup | 没有EventLoop的介入，也就没有Selector，没有Selector，那还注册啥？
         // 对应Nio原生如下
         // SelectionKey selectionKey = serverSocketChannel.register(selector, 0, null);
         ChannelFuture regFuture = config().group().register(channel);
@@ -356,6 +367,11 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     abstract void init(Channel channel) throws Exception;
 
+    /**
+     *  调用链路很深，但我们从最本质想下，bind，一定是SSC来进行bind的动作
+     *  SSC在netty中又是被NIOSSC包装的，所以最后执行的就是
+     *  NIOSSC.doBind(SocketAddress localAddress)
+     */
     private static void doBind0(
             final ChannelFuture regFuture, final Channel channel,
             final SocketAddress localAddress, final ChannelPromise promise) {

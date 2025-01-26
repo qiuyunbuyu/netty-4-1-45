@@ -66,7 +66,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
                     "Failed to open a server socket.", e);
         }
     }
-
+    // ssc相关配置
     private final ServerSocketChannelConfig config;
 
     /**
@@ -135,7 +135,7 @@ public class NioServerSocketChannel extends AbstractNioMessageChannel
         // 最后bind端口的地方：
         // 原生NIO：serverSocketChannel.bind(new InetSocketAddress(8000));
         if (PlatformDependent.javaVersion() >= 7) {
-            // config.getBacklog() -> 全连接队列的大小
+            // config.getBacklog() -> 全连接队列的大小(啥是全连接队列？ -> 存储 “完成了TCP 3次握手的连接” 的队列)
             javaChannel().bind(localAddress, config.getBacklog());
         } else {
             javaChannel().socket().bind(localAddress, config.getBacklog());

@@ -93,7 +93,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         this.channel = ObjectUtil.checkNotNull(channel, "channel");
         succeededFuture = new SucceededChannelFuture(channel, null);
         voidPromise =  new VoidChannelPromise(channel, true);
-
+        // 初始化ChannelPipeline时，创建了head - tail
         tail = new TailContext(this);
         head = new HeadContext(this);
 
@@ -225,6 +225,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     private void addLast0(AbstractChannelHandlerContext newCtx) {
+        // addLast -> 放置在tail前面，并继续建立/维护双向结构
         AbstractChannelHandlerContext prev = tail.prev;
         newCtx.prev = prev;
         newCtx.next = tail;
@@ -1395,8 +1396,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) {
+            // bind端口完成，会调用NIOSSC对应的PipeLine中所有Handler的channelActive方法，HeadContext为调用入口
             // 调用下一个Handler的fireChannelActive方法
             ctx.fireChannelActive();
+
+            // 很深的调用链路---
             // 最后一直能调用到：AbstractNioChannel的doBeginRead()
             readIfIsAutoRead();
         }

@@ -475,6 +475,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 try {
                     // 第一次execute会启动一个新的线程NioEventLoop，来执行register0(promise);
                     // eventLoop是个单线程的线程池，后面再Execute也不会创建新线程了
+                    // 会进行线程切换-后续运行不会再走入此分支
                     eventLoop.execute(new Runnable() {
                         @Override
                         public void run() {
@@ -501,7 +502,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 }
                 boolean firstRegistration = neverRegistered;
                 // OP-ACCEPT事情处理目标2. SocketChannel注册到selector
-                // 最核心的register，ssc或sc注册selector的地方
+                // 最核心的register，ssc或sc注册selector的地方(未关注网络事件)
+                // -AbstractNioChannel.doRegister()
                 doRegister();
                 neverRegistered = false;
                 registered = true;
@@ -512,7 +514,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 // 此处如果是firstRegistration，会调用pipeline中的Handler的init方法
                 // 注意分清此时的pipeline是ssc的pipeline还是sc的pipeline，2者的pipeline中的Handler是不一致的
                 // 如果是serversocketchannel的pipeline
-                //     会调用 ServerBootStrap中的 p.addLast(new ChannelInitializer<Channel>()来监听ACCEPT事件
+                //     会调用 ServerBootStrap 中的 init方法 中添加的 ChannelInitializer的ChannelHandler对应的initChannel中的方法
+                //     来监听ACCEPT事件
                 // 如果是socketchannel的pipeline
                 //     会调用到用户在初始化设置时，自定义的添加Handler的逻辑
                 //     OP-ACCEPT事情处理目标3. firstRegistration时调用pipeline中的Handler的init方法来添加用户自定义Handler
@@ -547,7 +550,11 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         }
 
         @Override
-        // 最后bind走到这里
+        /*
+         * 最后bind走到这里， 完成第二部分核心工作：
+         * 1. bind端口
+         * 2. SSC关注OP_ACCEPT事件
+         */
         public final void bind(final SocketAddress localAddress, final ChannelPromise promise) {
             assertEventLoop();
 
@@ -578,14 +585,16 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 closeIfClosed();
                 return;
             }
+
+
             // 对应NIO原生：selectionKey.interestOps(SelectionKey.OP_ACCEPT);的入口
             // 判断bind端口之后的channel 是否 active and so connected ？
             if (!wasActive && isActive()) {
                 invokeLater(new Runnable() {
                     @Override
                     public void run() {
-                        // 调用所有handler中channelActive方法
-                        // 此时：[head - accpet - tail ]
+                        // 调用所有handler中 *channelActive* 方法
+                        // 此时有3个Handler：[HeadContext - ServerBootstrapAcceptor - TailContext ]
                         pipeline.fireChannelActive();
                     }
                 });
