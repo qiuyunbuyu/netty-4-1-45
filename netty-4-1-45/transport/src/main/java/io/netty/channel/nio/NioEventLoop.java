@@ -111,8 +111,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     /**
      * The NIO {@link Selector}.
      * Selector define
+     *
+     * Selector最核心的作用就是：
+     * 1. 轮询捕捉 网络事件
+     * 2. 将“已就绪”的网络事件，保存至selectedKeys这一容器中，Netty的优化点之一，就是优化这一“容器”的底层存储结构
+     *
+     * selector - selectedKeys存储 [数组] 遍历性能高
+     * unwrappedSelector - selectedKeys存储 [set] 遍历性能差
      */
-    private Selector selector;
+    private Selector selector; // 对应实现子类：SelectedSelectionKeySetSelector
     private Selector unwrappedSelector;
     private SelectedSelectionKeySet selectedKeys;
 
@@ -246,7 +253,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                     if (cause != null) {
                         return cause;
                     }
-                    // 设置属性
+                    // 设置unwrappedSelector对应的selectedKeysField字段属性，替换为Netty中自己的“selectedKeySet-底层存储是数组”
                     selectedKeysField.set(unwrappedSelector, selectedKeySet);
                     publicSelectedKeysField.set(unwrappedSelector, selectedKeySet);
                     return null;
