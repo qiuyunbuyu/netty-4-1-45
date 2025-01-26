@@ -459,6 +459,11 @@ public final class NioEventLoop extends SingleThreadEventLoop {
      *
      * 其中网络事件select操作还是阻塞的（selector.select(), 没有网络事件时）
      * 这怎么解决的？阻塞的时候，提交了一个普通/定时任务咋办..
+     *
+     * 干啥要整的这么复杂？只处理网络事件不好吗？
+     * 其实还是Netty的定位是啥 -> 异步事件驱动的网络应用框架
+     * 本质是让用户专注自己的业务处理逻辑
+     * 如果用户有 [普通任务/定时任务] 的需求，也不要自己随便起线程，而是使用Netty包装的EventLoop来统一管理线程+管理异步处理任务
      */
     @Override
     protected void run() {
@@ -568,6 +573,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                     }
                     selectCnt = 0;
                 } else if (unexpectedSelectorWakeup(selectCnt)) { // Unexpected wakeup (unusual case)
+                    // unexpectedSelectorWakeup(selectCnt) -> Selector空转问题处理入口 -> 伴随的Selector的重建
                     selectCnt = 0;
                 }
             } catch (CancelledKeyException e) {
