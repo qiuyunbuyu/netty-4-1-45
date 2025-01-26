@@ -501,7 +501,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                     return;
                 }
                 boolean firstRegistration = neverRegistered;
-                // OP-ACCEPT事情处理目标2. SocketChannel注册到selector
+                // - OP-ACCEPT事情处理目标2. SocketChannel注册到selector -
                 // 最核心的register，ssc或sc注册selector的地方(未关注网络事件)
                 // -AbstractNioChannel.doRegister()
                 doRegister();
@@ -517,8 +517,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 //     会调用 ServerBootStrap 中的 init方法 中添加的 ChannelInitializer的ChannelHandler对应的initChannel中的方法
                 //     来监听ACCEPT事件
                 // 如果是socketchannel的pipeline
-                //     会调用到用户在初始化设置时，自定义的添加Handler的逻辑
-                //     OP-ACCEPT事情处理目标3. firstRegistration时调用pipeline中的Handler的init方法来添加用户自定义Handler
+                //     会调用到用户在初始化设置时，自定义的添加Handler的initChannel(SocketChannel ch)逻辑
+                //     - OP-ACCEPT事情处理目标3. firstRegistration时调用pipeline中的Handler的init方法来添加用户自定义Handler -
                 pipeline.invokeHandlerAddedIfNeeded();
 
                 // 给：io.netty.bootstrap.AbstractBootstrap.initAndRegister()中
@@ -531,7 +531,9 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
                 if (isActive()) {
                     // 此处如果是firstRegistration，会调用pipeline中的Handler的active方法来关心想关心的网络事件
                     if (firstRegistration) {
-                        // OP-ACCEPT事情处理目标 4. 一直调到AbstractNioChannel的doBeginRead()方法关心了OP_READ事件
+                        // - OP-ACCEPT事情处理目标 4. SC关注了了OP_READ事件 -
+                        // 先走了HeadContext的ChannelActive方法，然后一连串链下去了---
+                        // 最后一直调到AbstractNioChannel的doBeginRead()方法关心了OP_READ事件
                         pipeline.fireChannelActive();
                     } else if (config().isAutoRead()) {
                         // This channel was registered before and autoRead() is set. This means we need to begin read

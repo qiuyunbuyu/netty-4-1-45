@@ -92,7 +92,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                     exception = t;
                 }
 
-                // OP-ACCEPT事情处理目标1. 取出SocketChannel
+                // - OP-ACCEPT事情处理目标1. 取出SocketChannel -
                 // # part2：pipeline对每一个NioSocketChannel执行fireChannelRead操做，把NioSocketChannel传给下一个Handler
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {

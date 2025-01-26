@@ -723,8 +723,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // See https://github.com/netty/netty/issues/2363
             selectedKeys.keys[i] = null;
 
-            // 取出附件,
-            // NioChannel
+            // 取出附件 即NioChannel，对应不同的子类
             //      NioServerSocketChannel -> pipeline
             //      NioSocketChannel -> pipeline
             // 现在想想附件，就是将原生的ServerSocketChannel和netty自定义的NioServerSocketChannel，做一个绑定
@@ -751,7 +750,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     /**
-     * “不同事件处理的模板代码”
+     * “不同网络事件处理的代码”
      * @param k 网络事件的SelectionKey
      * @param ch SelectionKey的附件attachment
      */
