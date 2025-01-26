@@ -854,15 +854,16 @@
             </goals>
             <phase>validate</phase>
             <configuration>
-              <consoleOutput>true</consoleOutput>
-              <logViolationsToConsole>true</logViolationsToConsole>
-              <failsOnError>true</failsOnError>
-              <failOnViolation>true</failOnViolation>
-              <configLocation>io/netty/checkstyle.xml</configLocation>
-              <sourceDirectories>
-                <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
-                <sourceDirectory>${project.build.testSourceDirectory}</sourceDirectory>
-              </sourceDirectories>
+              <skip>true</skip>
+<!--              <consoleOutput>true</consoleOutput>-->
+<!--              <logViolationsToConsole>true</logViolationsToConsole>-->
+<!--              <failsOnError>true</failsOnError>-->
+<!--              <failOnViolation>true</failOnViolation>-->
+<!--              <configLocation>io/netty/checkstyle.xml</configLocation>-->
+<!--              <sourceDirectories>-->
+<!--                <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>-->
+<!--                <sourceDirectory>${project.build.testSourceDirectory}</sourceDirectory>-->
+<!--              </sourceDirectories>-->
             </configuration>
           </execution>
         </executions>

@@ -216,7 +216,8 @@ public class ServerBootstrap extends AbstractBootstrap<ServerBootstrap, ServerCh
             setAttributes(child, childAttrs);
 
             try {
-                // childGroup.register(child) 最后又会走到 AbstractChannel的register方法中 -> register0 -> doRegister() -> 来完成socketchannel对Selector的注册
+                // childGroup.register(child)
+                // 最后又会走到 AbstractChannel的register方法中 -> register0 -> doRegister() -> 来完成socketchannel对Selector的注册
                 childGroup.register(child).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture future) throws Exception {

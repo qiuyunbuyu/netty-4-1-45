@@ -197,8 +197,10 @@ public abstract class AbstractNioByteChannel extends AbstractNioChannel {
                     pipeline.fireChannelRead(byteBuf);
 
                     // 为啥要设置成null？
-                    // "在循环的开始，byteBuf 会被重新分配一个新的缓冲区，这是因为在上一次循环中使用的 byteBuf 已经被传递给管道（pipeline）中的下一个处理器（handler），并且可能已经被修改或释放。" +
-                    // "将 byteBuf 设置为 null 确保了在下一次迭代中，allocHandle.allocate(allocator) 能够分配一个新的缓冲区，而不是重新使用可能已经被释放的旧缓冲区。"
+                    // "在循环的开始，byteBuf 会被重新分配一个新的缓冲区，
+                    // 这是因为在上一次循环中使用的 byteBuf 已经被传递给管道（pipeline）中的下一个处理器（handler），并且可能已经被修改或释放。"
+                    // "将 byteBuf 设置为 null 确保了在下一次迭代中，allocHandle.allocate(allocator) 能够分配一个新的缓冲区，
+                    // 而不是重新使用可能已经被释放的旧缓冲区。"
                     byteBuf = null;
                 } while (allocHandle.continueReading()); // 循环啥时候结束？
 

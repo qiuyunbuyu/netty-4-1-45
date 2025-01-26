@@ -419,7 +419,8 @@ public final class ChannelOutboundBuffer {
      * Refer to {@link NioSocketChannel#doWrite(ChannelOutboundBuffer)} for an example.
      * </p>
      * @param maxCount The maximum amount of buffers that will be added to the return value. | 1024 返回值ByteBuffer[]最大容量
-     * @param maxBytes A hint toward the maximum number of bytes to include as part of the return value. Note that this | "发送socket缓冲区的容量”
+     * @param maxBytes A hint toward the maximum number of bytes to include as part of the return value. Note that this
+     *                 | "发送socket缓冲区的容量”
      *                 value maybe exceeded because we make a best effort to include at least 1 {@link ByteBuffer}
      *                 in the return value to ensure write progress is made.
      */
