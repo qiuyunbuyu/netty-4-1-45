@@ -838,12 +838,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
      * @param immediate
      */
     private void execute(Runnable task, boolean immediate) {
-        // 判断是否是NIO线程
+        // 判断是否是EventLoop线程
         boolean inEventLoop = inEventLoop();
         // 添加到taskQueue中
         addTask(task);
         if (!inEventLoop) {
-            // 启动NIO线程逻辑
+            // 启动EventLoop线程逻辑
             startThread();
             if (isShutdown()) {
                 boolean reject = false;
@@ -957,12 +957,12 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
     private static final long SCHEDULE_PURGE_INTERVAL = TimeUnit.SECONDS.toNanos(1);
 
     private void startThread() {
-        // 状态判断：保证只创建一次
+        // 状态判断：保证只创建/启动一次 NIOEventLoop线程
         if (state == ST_NOT_STARTED) {
             if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
                 boolean success = false;
                 try {
-                    // 起NIOEventLoop线程线程
+                    // 真正创建/启动NIOEventLoop线程的地方
                     doStartThread();
                     success = true;
                 } finally {
@@ -994,7 +994,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
 
     private void doStartThread() {
         assert thread == null;
-        // 创建NIOEventLoop线程
+        // 此时executor对应的实现是：ThreadExecutorMap
+        // 创建NIOEventLoop线程 + 调用NioEventLoop中的run方法
         executor.execute(new Runnable() {
             @Override
             public void run() {
@@ -1007,7 +1008,8 @@ public abstract class SingleThreadEventExecutor extends AbstractScheduledEventEx
                 boolean success = false;
                 updateLastExecutionTime();
                 try {
-                    // 实际干的活
+                    // 开启事件循环
+                    // SingleThreadEventExecutor.this = NioEventLoop
                     SingleThreadEventExecutor.this.run();
                     success = true;
                 } catch (Throwable t) {
