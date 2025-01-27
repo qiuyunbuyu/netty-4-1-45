@@ -290,7 +290,7 @@ public final class ChannelOutboundBuffer {
             // only release message, notify and decrement if it was not canceled before.
             ReferenceCountUtil.safeRelease(msg);
             safeSuccess(promise);
-            // 2. 修改了水位线，如果水位线已经低于高水位线 ，修改channel可以写
+            // 2. 修改了水位线，如果水位线已经低于高水位线 ，修改ChannelOutboundBuffer可以写状态
             decrementPendingOutboundBytes(size, false, true);
         }
 
@@ -371,7 +371,7 @@ public final class ChannelOutboundBuffer {
                     progress(readableBytes);
                     writtenBytes -= readableBytes;
                 }
-                // 核心方法
+                // 1. 更新flush指针 + 2. 修改水位线()+ 3. (可能修改)ChannelOutboundBuffer为可写状态
                 remove();
             } else { // readableBytes > writtenBytes
                 if (writtenBytes != 0) {

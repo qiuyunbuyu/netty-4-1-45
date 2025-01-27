@@ -760,6 +760,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     }
 
     void invokeWriteAndFlush(Object msg, ChannelPromise promise) {
+        // write & flush的入口 -> 最后由Head Context 调用到 AbstractUnsafe.write/flush() 方法
         if (invokeHandler()) {
             invokeWrite0(msg, promise);
             invokeFlush0();
