@@ -81,6 +81,12 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
 
     @Override
     protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+        // 能被add进out的”decoded“，代表着是一个处理好的”业务消息“
+        // 什么叫处理好的”业务消息“呢？
+        // 举例1：sunshuai\nxiaohei\nxiaojr\n -> sunshuai就能作为一个处理好的”业务消息“被放入到out容器中
+        // 举例2：
+        //      http请求，netty最原始是不知道什么什么叫http，它面对的只是一波byte流
+        //      是我们人为的告诉netty，从哪到哪个byte代表着一个完整的http请求，只有一个”处理好的，完整的http请求“可以被放入到out容器中
         Object decoded = decode(ctx, in);
         if (decoded != null) {
             out.add(decoded);

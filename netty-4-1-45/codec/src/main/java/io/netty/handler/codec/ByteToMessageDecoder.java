@@ -265,14 +265,35 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      */
     protected void handlerRemoved0(ChannelHandlerContext ctx) throws Exception { }
 
+    /**
+     * - 解码Handler通常作为用户的第一个Handler存在
+     * - 处理OP_READ事件后会调用fireChannelRead方法来调用下一个Handler的channelRead，即此方法
+     * - 此方法中会调用其子类实现的decode方法，来处理ByteBuf的数据
+     */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (msg instanceof ByteBuf) {
+            // 1.
+            // 存储 解码后的数据：list中的每一个元素 都是解码好的数据
+            // 存储 封帧后的数据：list中的每一个元素 就是一个解决了半包或者粘包问题的完整数据
             CodecOutputList out = CodecOutputList.newInstance();
+
             try {
+                // 2. 根据 cumulation 是否 == null ? 来判断是否是第一次(First)
                 first = cumulation == null;
+
+                // 3. 创建cumulation: 本质是个ByteBuf，用于存储解码过程中的原始数据，是累加的
+                // 比如下面这个案例：channel.writeAndFlush("sunshuai\nxiaohei\nxiaojr\n");
+                // 情况1： ByteBuf足够大，一次接收完成：sunshuai\nxiaohei\nxiaojr\n
+                // 情况2： ByteBuf不够大，分了2次接收完成
+                //              1. sunshuai\nxi
+                //              2. aohei\nxiaojr\n
+                // cumulation不管在什么情况下，都会把接收过程中的所有原始数据，都累加保存
+                // 所以又涉及到内存大小的管理了~~
                 cumulation = cumulator.cumulate(ctx.alloc(),
-                        first ? Unpooled.EMPTY_BUFFER : cumulation, (ByteBuf) msg);
+                            first ? Unpooled.EMPTY_BUFFER : cumulation, (ByteBuf) msg);
+
+                // 4. 2个容器都准备好了cumulation + out，就开始执行Decode逻辑
                 callDecode(ctx, cumulation, out);
             } catch (DecoderException e) {
                 throw e;
@@ -289,7 +310,7 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                     numReads = 0;
                     discardSomeReadBytes();
                 }
-
+                // 5. 将最后一个”处理好的消息“发送给下一个Handler
                 int size = out.size();
                 firedChannelRead |= out.insertSinceRecycled();
                 fireChannelRead(ctx, out, size);
@@ -415,11 +436,18 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      */
     protected void callDecode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) {
         try {
+            // in是啥？ -> 用于累加保存“原始”数据的容器
+            // 还有空间isReadable()，就可以不断循环decode
             while (in.isReadable()) {
+                // out是啥？ -> 用于保存“处理好”数据的容器
                 int outSize = out.size();
 
+                // outSize > 0 意味着啥？ -> 已经有了“处理好”的数据
                 if (outSize > 0) {
+                    // 将"处理好的数据"丢给下一个Handler来Read
                     fireChannelRead(ctx, out, outSize);
+
+                    // 清空out容器
                     out.clear();
 
                     // Check if this handler was removed before continuing with decoding.
@@ -434,6 +462,8 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
                 }
 
                 int oldInputLength = in.readableBytes();
+
+                // **真正的decode逻辑调用的地方
                 decodeRemovalReentryProtection(ctx, in, out);
 
                 // Check if this handler was removed before continuing the loop.
