@@ -50,6 +50,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private static final String HEAD_NAME = generateName0(HeadContext.class);
     private static final String TAIL_NAME = generateName0(TailContext.class);
 
+    // 为Handler取名服务的，存储的是Map<Class<?>, String>
+    // key: Class<?> Handler类
+    // value: String Handler名字
     private static final FastThreadLocal<Map<Class<?>, String>> nameCaches =
             new FastThreadLocal<Map<Class<?>, String>>() {
         @Override
@@ -96,7 +99,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         // 初始化ChannelPipeline时，创建了head - tail
         tail = new TailContext(this);
         head = new HeadContext(this);
-
+        // 构建了双向链表的结构
         head.next = tail;
         tail.prev = head;
     }
@@ -195,14 +198,28 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return addLast(null, name, handler);
     }
 
+    /**
+     *
+     * @param group    执行调用pipeline的EventLoop
+     *                 the {@link EventExecutorGroup} which will be used to execute the {@link ChannelHandler}
+     *                 methods
+     * @param name     the name of the handler to append
+     * @param handler  the handler to append
+     *
+     * @return ChannelPipeline
+     */
     @Override
     public final ChannelPipeline addLast(EventExecutorGroup group, String name, ChannelHandler handler) {
         final AbstractChannelHandlerContext newCtx;
         synchronized (this) {
+            // 1. 检查待添加的Handler是不是已经在Pipeline中存在
             checkMultiplicity(handler);
 
+            // 2. 创建Handler对应ChannelContext - DefaultChannelHandlerContext
+            // handler被存在了DefaultChannelHandlerContext中
             newCtx = newContext(group, filterName(name, handler), handler);
 
+            // 3. 加入到双向链表尾部
             addLast0(newCtx);
 
             // If the registered is false it means that the channel was not registered on an eventLoop yet.
@@ -220,6 +237,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
                 return this;
             }
         }
+        // 触发HandlerADD回调
         callHandlerAdded0(newCtx);
         return this;
     }
@@ -279,9 +297,11 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     }
 
     private String filterName(String name, ChannelHandler handler) {
+        // case1: 没给Handler提供名字 -> 生成名字
         if (name == null) {
             return generateName(handler);
         }
+        // case2：给Handler提供了名字 -> 校验名字
         checkDuplicateName(name);
         return name;
     }
@@ -384,7 +404,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         return this;
     }
-
+    // 给Handler生成名字的逻辑
     private String generateName(ChannelHandler handler) {
         Map<Class<?>, String> cache = nameCaches.get();
         Class<?> handlerType = handler.getClass();
@@ -396,6 +416,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         // It's not very likely for a user to put more than one handler of the same type, but make sure to avoid
         // any name conflicts.  Note that we don't cache the names generated here.
+        // 判断处理 head tail 以外 name有没有冲突
+        // 没有 -> 返回值 null
+        // 有   -> 返回名字  ！=null
         if (context0(name) != null) {
             String baseName = name.substring(0, name.length() - 1); // Strip the trailing '0'.
             for (int i = 1;; i ++) {
@@ -592,7 +615,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         oldCtx.prev = newCtx;
         oldCtx.next = newCtx;
     }
-
+    // " is not a @Sharable handler, so can't be added or removed multiple times. "
     private static void checkMultiplicity(ChannelHandler handler) {
         if (handler instanceof ChannelHandlerAdapter) {
             ChannelHandlerAdapter h = (ChannelHandlerAdapter) handler;

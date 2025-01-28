@@ -34,9 +34,15 @@ public class FactorialServerHandler extends SimpleChannelInboundHandler<BigInteg
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, BigInteger msg) throws Exception {
+
+        // 想把msg,传给下一个Handler，可以使用如下2种传递调用给下一个Handler
+        // ctx.fireChannelRead(msg);
+        // super.channelRead(ctx, msg);
+
         // Calculate the cumulative factorial and send it to the client.
         lastMultiplier = msg;
         factorial = factorial.multiply(msg);
+
         // 可以以此行代码为入口，看write数据的流程
         if(ctx.channel().isWritable()){
             ctx.writeAndFlush(factorial);

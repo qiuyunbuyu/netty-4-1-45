@@ -30,6 +30,12 @@ import io.netty.channel.ChannelHandlerMask.Skip;
  * method returns automatically. If you are looking for a {@link ChannelInboundHandler} implementation that
  * releases the received messages automatically, please see {@link SimpleChannelInboundHandler}.
  * </p>
+ *
+ * 定义了不同”事件“发生了情况下的处理方法？，那么就带来了一个疑问，这些方法是如何被触发的？
+ * ChannelPipeline中有一些系列的fire方法来触发
+ * pipeline.fireChannelRead(byteBuf);
+ * pipeline.fireChannelReadComplete();
+ * .....
  */
 public class ChannelInboundHandlerAdapter extends ChannelHandlerAdapter implements ChannelInboundHandler {
 
@@ -86,6 +92,9 @@ public class ChannelInboundHandlerAdapter extends ChannelHandlerAdapter implemen
      * to the next {@link ChannelInboundHandler} in the {@link ChannelPipeline}.
      *
      * Sub-classes may override this method to change behavior.
+     * 可以想一下为啥需要ctx，msg 2个入参
+     * ctx -> 可以取到整个pipeline的上下文, 从而找到后面的Handler
+     * msg -> 可处理的消息
      */
     @Skip
     @Override

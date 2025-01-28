@@ -51,7 +51,7 @@ public final class FactorialServer {
             b.group(bossGroup, workerGroup)
              .channel(NioServerSocketChannel.class)
              .handler(new LoggingHandler(LogLevel.INFO))
-             .childHandler(new FactorialServerInitializer(sslCtx));
+             .childHandler(new FactorialServerInitializer(sslCtx)); //ChannelInitializer的initChannel 作为 pipeline的初始化入口
 
             b.bind(PORT).sync().channel().closeFuture().sync();
         } finally {

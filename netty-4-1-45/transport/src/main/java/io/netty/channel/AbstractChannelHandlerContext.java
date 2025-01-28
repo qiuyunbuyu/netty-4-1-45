@@ -352,6 +352,9 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     @Override
     public ChannelHandlerContext fireChannelRead(final Object msg) {
+        // 先调用 findContextInbound(MASK_CHANNEL_READ) -> 找到下一个HandlerContext
+        // 比如当前HandlerContext是 JdkZlibDecoder
+        // 那么如果它调用 fireChannelRead，会先找到其下一个Handler，即 BigIntegerDecoder
         invokeChannelRead(findContextInbound(MASK_CHANNEL_READ), msg);
         return this;
     }
@@ -374,6 +377,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
     private void invokeChannelRead(Object msg) {
         if (invokeHandler()) {
             try {
+                // handler() 找到 HandlerContext 中包装的 Handler， 然后调用其对应的channelRead方法
                 ((ChannelInboundHandler) handler()).channelRead(this, msg);
             } catch (Throwable t) {
                 notifyHandlerException(t);
@@ -906,7 +910,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         }
         return false;
     }
-
+    // 寻找pipeline中的 下一个 ChannelHandlerContext(其中包含了Handler)
     private AbstractChannelHandlerContext findContextInbound(int mask) {
         AbstractChannelHandlerContext ctx = this;
         do {

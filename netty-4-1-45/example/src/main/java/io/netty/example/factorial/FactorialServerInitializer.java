@@ -35,6 +35,9 @@ public class FactorialServerInitializer extends ChannelInitializer<SocketChannel
 
     @Override
     public void initChannel(SocketChannel ch) {
+        // 之前说在处理op-READ事件过程中，会将Handler纳入到pipeline中
+        // 其实更准确的说法是，ChannelInitializer的initChannel中，能够获取到此Channel对应的pipeline
+        // 然后不断调用 "pipeline.addLast".....
         ChannelPipeline pipeline = ch.pipeline();
 
         if (sslCtx != null) {

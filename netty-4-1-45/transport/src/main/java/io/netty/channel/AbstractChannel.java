@@ -75,6 +75,8 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
         // 创建了Unsafe：IO读写
         unsafe = newUnsafe();
         // 创建了pipeline：处理逻辑
+        // AbstractChannel 可以简单理解成 C/S 之间的连接， Pipeline针对于 每一个Client 独立一套
+        // 一个C/S连接 <-> 一个Channel <-> 一个pipeline
         pipeline = newChannelPipeline();
     }
 
