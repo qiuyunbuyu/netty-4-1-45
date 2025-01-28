@@ -1046,6 +1046,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelFuture writeAndFlush(Object msg) {
+        // channel.writeAndFlush()  ---> 从tail开始
         return tail.writeAndFlush(msg);
     }
 
@@ -1393,6 +1394,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void flush(ChannelHandlerContext ctx) {
+            // AbstractUnsafe方法
             unsafe.flush();
         }
 

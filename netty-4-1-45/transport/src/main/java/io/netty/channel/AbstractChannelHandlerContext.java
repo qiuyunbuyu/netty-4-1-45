@@ -773,7 +773,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
         }
     }
 
-    private void write(Object msg, boolean flush, ChannelPromise promise) {
+    private void  write(Object msg, boolean flush, ChannelPromise promise) {
         ObjectUtil.checkNotNull(msg, "msg");
         try {
             if (isNotValidPromise(promise, true)) {
@@ -785,13 +785,17 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
             ReferenceCountUtil.release(msg);
             throw e;
         }
-
+        // 找到下一个outbound - HandlerContext
         final AbstractChannelHandlerContext next = findContextOutbound(flush ?
                 (MASK_WRITE | MASK_FLUSH) : MASK_WRITE);
         final Object m = pipeline.touch(msg, next);
+
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
             if (flush) {
+                // 调用下一个 ChannelOutboundHandler 的
+                // write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) 和
+                // flush(ChannelHandlerContext ctx)
                 next.invokeWriteAndFlush(m, promise);
             } else {
                 next.invokeWrite(m, promise);
@@ -921,6 +925,7 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 
     private AbstractChannelHandlerContext findContextOutbound(int mask) {
         AbstractChannelHandlerContext ctx = this;
+        // outbound往前找
         do {
             ctx = ctx.prev;
         } while ((ctx.executionMask & mask) == 0);

@@ -97,6 +97,9 @@ public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdap
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
+        // 编码器，可以作为 OutboundHandler 实际的一个体现，其内部的write方法，也不会不停的调用
+        // -  ctx.write(msg, promise);
+        // 然后继续找前一个Handler，然后继续调用其write..
         ByteBuf buf = null;
         try {
             if (acceptOutboundMessage(msg)) {

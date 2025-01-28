@@ -45,7 +45,10 @@ public class FactorialServerHandler extends SimpleChannelInboundHandler<BigInteg
 
         // 可以以此行代码为入口，看write数据的流程
         if(ctx.channel().isWritable()){
+            // write 方式1: 当前context.prev --- Outbound ----->  HeadContext
             ctx.writeAndFlush(factorial);
+            // write 方式2: TailContext --- Outbound ----->  HeadContext
+            // ctx.channel().writeAndFlush(factorial);
         }
     }
 
