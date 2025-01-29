@@ -49,16 +49,22 @@ public class HashedWheelTimerTest {
 
     @Test
     public void testScheduleTimeoutShouldRunAfterDelay() throws InterruptedException {
+        // 1. 初始化[HashedWheelTimer]: [存储结构] + [运行线程]
         final Timer timer = new HashedWheelTimer();
         final CountDownLatch barrier = new CountDownLatch(1);
+
+        // 2. 初始化[HashedWheelTimeout] = [动作] + [延时时间]
         final Timeout timeout = timer.newTimeout(new TimerTask() {
+            // [动作]
             @Override
             public void run(Timeout timeout) throws Exception {
                 barrier.countDown();
-            }
+            } // 时间
         }, 2, TimeUnit.SECONDS);
         assertTrue(barrier.await(3, TimeUnit.SECONDS));
         assertTrue("timer should expire", timeout.isExpired());
+
+        // 3. 释放资源 + 取消所有剩余的任务
         timer.stop();
     }
 
