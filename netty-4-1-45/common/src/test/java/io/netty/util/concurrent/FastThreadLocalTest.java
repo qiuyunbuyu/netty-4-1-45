@@ -101,6 +101,8 @@ public class FastThreadLocalTest {
     @Test
     public void testMultipleSetRemove() throws Exception {
         final FastThreadLocal<String> threadLocal = new FastThreadLocal<String>();
+        final FastThreadLocal<String> threadLocal2 = new FastThreadLocal<String>();
+
         final Runnable runnable = new Runnable() {
             @Override
             public void run() {
@@ -156,6 +158,40 @@ public class FastThreadLocalTest {
 
         assertEquals(0, ObjectCleaner.getLiveSetCount() - sizeWhenStart);
     }
+    @Test
+    public void  demo() throws Exception{
+        final FastThreadLocal<String> fastThreadLocal = new FastThreadLocal<String>();
+        final FastThreadLocal<String> fastThreadLocal2 = new FastThreadLocal<String>();
+
+        FastThreadLocalThread fthread = new FastThreadLocalThread(new Runnable() {
+            @Override
+            public void run() {
+                fastThreadLocal.set("fthread1");
+
+                try {
+                    Thread.sleep(1500);
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+                System.out.println(Thread.currentThread()+" : "+ fastThreadLocal.get());
+            }
+        }, "fastThread");
+
+        FastThreadLocalThread fthread2 = new FastThreadLocalThread(new Runnable() {
+            @Override
+            public void run() {
+                fastThreadLocal.set("fthread2");
+
+                System.out.println(Thread.currentThread()+" : "+ fastThreadLocal.get());
+            }
+        }, "fastThread2");
+
+        fthread.start();
+        fthread2.start();
+
+        Thread.sleep(3000);
+    }
+
 
     @Test(timeout = 4000)
     public void testOnRemoveCalledForFastThreadLocalGet() throws Exception {

@@ -96,6 +96,7 @@ public class FastThreadLocal<V> {
 
     @SuppressWarnings("unchecked")
     private static void addToVariablesToRemove(InternalThreadLocalMap threadLocalMap, FastThreadLocal<?> variable) {
+        // 找到object[32]中，0号元素Set<FastThreadLocal<?>>
         Object v = threadLocalMap.indexedVariable(variablesToRemoveIndex);
         Set<FastThreadLocal<?>> variablesToRemove;
         if (v == InternalThreadLocalMap.UNSET || v == null) {
@@ -104,7 +105,7 @@ public class FastThreadLocal<V> {
         } else {
             variablesToRemove = (Set<FastThreadLocal<?>>) v;
         }
-
+        // Set<FastThreadLocal<?>>添加FastThreadLocal
         variablesToRemove.add(variable);
     }
 
@@ -122,9 +123,13 @@ public class FastThreadLocal<V> {
         variablesToRemove.remove(variable);
     }
 
+    //    index 在虚拟机 全局唯一
+    //    FastThreadLocal f1 = new FastThreadLocal();  index=1
+    //    FastThreadLocal f2 = new FastThreadLocal();  index=2
     private final int index;
 
     public FastThreadLocal() {
+        // FastThreadLocal初始化时刻，仅获取了一个递增的Index
         index = InternalThreadLocalMap.nextVariableIndex();
     }
 
@@ -133,12 +138,18 @@ public class FastThreadLocal<V> {
      */
     @SuppressWarnings("unchecked")
     public final V get() {
+        // 找到当前线程对应的InternalThreadLocalMap
         InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get();
+
+        // index是当前FastThreadLocal-初始化对应的标志，利用此标志为下标从Object[32]中取出对应存储的值
         Object v = threadLocalMap.indexedVariable(index);
+
+        // 有值则返回(非UNSET)
         if (v != InternalThreadLocalMap.UNSET) {
             return (V) v;
         }
 
+        // 初始化值，很多Util类，像ByteBufUtil，会重自己实现initialValue()，来让get的时候，直接生成一个合适的初始值并返回
         return initialize(threadLocalMap);
     }
 
@@ -186,12 +197,18 @@ public class FastThreadLocal<V> {
 
     /**
      * Set the value for the current thread.
+     * set
      */
     public final void set(V value) {
         if (value != InternalThreadLocalMap.UNSET) {
+            // 获得 当前线程的InternalThreadLocalMap 即Object[32]
             InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get();
+            // 将value，放入当前线程的Object[32]
             setKnownNotUnset(threadLocalMap, value);
         } else {
+            // 把当前FastTheadLocal重置，包括如下2个部分：
+            // 1. 把对应Thread中的InternalThreadLocalMap中的对应Object[32]中的当前FastTheadLocal的index位置的值 设置成UNSET，(真绕.-.)
+            // 2. Object[0]中对应的Set集合里面的 FastThreadLocal 删掉
             remove();
         }
     }
@@ -211,7 +228,14 @@ public class FastThreadLocal<V> {
      * @return see {@link InternalThreadLocalMap#setIndexedVariable(int, Object)}.
      */
     private void setKnownNotUnset(InternalThreadLocalMap threadLocalMap, V value) {
+        // only if a new thread-local variable has been created -> true
         if (threadLocalMap.setIndexedVariable(index, value)) {
+            // 下面这行有点绕，看它之前，我们要知道2个前提：
+            // 前提1：一个Thread，可能会使用到多个FastThreadLocal
+            // 前提2：一个Thread对应一个ThreadLocalMap(object 32)
+            // 前提3：object[32]中，0号元素是用来存储：Set<FastThreadLocal<?>>
+            // 下面一行代码的作用就是
+            // 如果“某个Thread第一次使用某一FastThreadLocal”，那么该FastThreadLocal对象本身会被添加至object[32]中，0号元素中的Set<FastThreadLocal<?>>中
             addToVariablesToRemove(threadLocalMap, this);
         }
     }
