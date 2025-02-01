@@ -31,6 +31,10 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
     private static final Iterator<PoolChunkMetric> EMPTY_METRICS = Collections.<PoolChunkMetric>emptyList().iterator();
     private final PoolArena<T> arena;
     private final PoolChunkList<T> nextList;
+
+    // [minUsage, maxUsage] 用于判断Chunk是否升格和降格----
+    // 某一Chunk使用率 < minUsage -> 降格
+    // 某一Chunk使用率 > maxUsage -> 升格
     private final int minUsage;
     private final int maxUsage;
     private final int maxCapacity;
@@ -96,9 +100,14 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
     }
 
     boolean free(PoolChunk<T> chunk, long handle, ByteBuffer nioBuffer) {
+        // 1. 某个chunk释放某块Buffer(内存空间)
         chunk.free(handle, nioBuffer);
+
+        // 2. 某一Chunk使用率 < minUsage -> 降格
         if (chunk.usage() < minUsage) {
+            // 从当前PoolChunkList移除
             remove(chunk);
+            // 把当前Chunk移动到下个级别的PoolChunkList
             // Move the PoolChunk down the PoolChunkList linked-list.
             return move0(chunk);
         }
@@ -123,6 +132,7 @@ final class PoolChunkList<T> implements PoolChunkListMetric {
      * {@link PoolChunkList} that has the correct minUsage / maxUsage in respect to {@link PoolChunk#usage()}.
      */
     private boolean move0(PoolChunk<T> chunk) {
+        // 只有q000的prevList，走入这个if分支，就代表已经没有继续往下移动的可能了，意味着相关资源可以释放了
         if (prevList == null) {
             // There is no previous PoolChunkList so return false which result in having the PoolChunk destroyed and
             // all memory associated with the PoolChunk will be released.

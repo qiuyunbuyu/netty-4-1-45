@@ -29,6 +29,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 import static java.lang.Math.max;
 
+/**
+ * Netty中内存池相关
+ * - Netty采用固定数量的多个PoolArena进行内存的分配 ，固定数量 （和CPU核数相关）
+ * - 每一个线程都有一个PoolArena(线程绑定，ThreadLocalMap), 多个线程共享一个PoolArena
+ * - 在netty申请内存资源时，不会直接向PoolArena直接申请，会先到 PoolThreadCache 获取内存资源
+ *       a. 有 直接使用
+ *       b. 到PoolArena中申请内存空间 判定 规格 --- PoolChunkList --Chunk--友邻算法 申请空间
+ */
 abstract class PoolArena<T> implements PoolArenaMetric {
     static final boolean HAS_UNSAFE = PlatformDependent.hasUnsafe();
 
@@ -50,13 +58,32 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     final int numSmallSubpagePools;
     final int directMemoryCacheAlignment;
     final int directMemoryCacheAlignmentMask;
+
+    // - Chunk 是 Netty 向操作系统申请内存的单位，所有的内存分配操作也是基于 Chunk 完成的，Chunk 可以理解为 Page 的集合，每个Chunk默认大小为 [16M]。
+    // - Page 是 Chunk 用于管理内存的单位，Netty 中的 Page 的大小为 [8K], 假如我们需要分配 64K 的内存，需要在 Chunk 中选取 8 个 Page 进行分配
+    // - Subpage 负责 Page 内的内存分配，假如我们分配的内存大小远小于 Page，直接分配一个 Page 会造成严重的内存浪费，
+    //   所以需要将 Page 划分为多个相同的子块进行分配，这里的子块就相当于 Subpage
+    //   -- 例如分配 1K 的内存时，Netty 会把一个 Page 等分为 8 个 1K 的 Subpage
+    //   --    分配 16B 的内存时，Netty 会把一个 Page 等分为 512 个 16BK 的 Subpage
+
+    // tiny对应存储-数组长度为32-对应Tiny的 31种 内存规格情况 | 16B 32B 48B .... 496B (496 / 16 = 31)，0号位为0，为了凑成2的n次方
     private final PoolSubpage<T>[] tinySubpagePools;
+    // small对应存储-数组长度为4-对应small的 4种 内存规格情况 | 512B 1K 2K 4K
     private final PoolSubpage<T>[] smallSubpagePools;
 
+    // 6个ChunkList- PoolChunkList 分配的内存 一定Normal 最小8k
+    //
+    // Netty中6个PoolChunkList 分别对应不同使用率的Chunk的集合
+    //    qinit chunk  0--25%
+    //    q000  chunk  1--50%
+    //    q025  chunk  25%--75%
+    //    q050  chunk  50%--100%
+    //    q075  chunk  75%---100%
+    //    q100  chunk 100
     private final PoolChunkList<T> q050;
     private final PoolChunkList<T> q025;
-    private final PoolChunkList<T> q000;
-    private final PoolChunkList<T> qInit;
+    private final PoolChunkList<T> q000;  // qoo中使用率为0chunk, 会释放资源
+    private final PoolChunkList<T> qInit; // qinit中使用率为0chunk，不释放资源
     private final PoolChunkList<T> q075;
     private final PoolChunkList<T> q100;
 
@@ -78,6 +105,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
     private final LongCounter deallocationsHuge = PlatformDependent.newLongCounter();
 
     // Number of thread caches backed by this arena.
+    // 当前PoolArena在被多少个线程共享
     final AtomicInteger numThreadCaches = new AtomicInteger();
 
     // TODO: Test if adding padding helps under contention
@@ -103,7 +131,8 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         for (int i = 0; i < smallSubpagePools.length; i ++) {
             smallSubpagePools[i] = newSubpagePoolHead(pageSize);
         }
-
+        // 使用率上升：q000里面chunk可以往q025移动，q025里面chunk可以往q050移动，q050里面chunk可以往q075移动....
+        // 使用率下降: 反之
         q100 = new PoolChunkList<T>(this, null, 100, Integer.MAX_VALUE, chunkSize);
         q075 = new PoolChunkList<T>(this, q100, 75, 100, chunkSize);
         q050 = new PoolChunkList<T>(this, q075, 50, 100, chunkSize);
@@ -115,6 +144,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         q075.prevList(q050);
         q050.prevList(q025);
         q025.prevList(q000);
+        // *注意q000的preList是null，释放空间时会用此作为判断
         q000.prevList(null);
         qInit.prevList(qInit);
 
@@ -174,11 +204,16 @@ abstract class PoolArena<T> implements PoolArenaMetric {
 
     private void allocate(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity) {
         final int normCapacity = normalizeCapacity(reqCapacity);
+        // Tiny Small
         if (isTinyOrSmall(normCapacity)) { // capacity < pageSize
             int tableIdx;
             PoolSubpage<T>[] table;
             boolean tiny = isTiny(normCapacity);
             if (tiny) { // < 512
+                // Netty会把当前线程中使用过的内存空间缓存起来，会先尝试从PoolThreadCache缓存里面取 -> 达到线程内复用的目标
+                // PoolThreadCache 被Netty存储在了什么位置？
+                //     被FastThreadLocal存储在FastThreadLocalThread(Thread) -- InternalThreadLocalMap
+                //     保证了线程中 所使用过的内存资源 可以复用
                 if (cache.allocateTiny(this, buf, reqCapacity, normCapacity)) {
                     // was able to allocate out of the cache so move on
                     return;
@@ -218,6 +253,7 @@ abstract class PoolArena<T> implements PoolArenaMetric {
             incTinySmallAllocation(tiny);
             return;
         }
+        // Normal Huge
         if (normCapacity <= chunkSize) {
             if (cache.allocateNormal(this, buf, reqCapacity, normCapacity)) {
                 // was able to allocate out of the cache so move on
@@ -233,18 +269,25 @@ abstract class PoolArena<T> implements PoolArenaMetric {
         }
     }
 
+    // 初始化：第一次内存分配的时候，PoolChunkList中 没有chunk可以分配。创建一个新的Chunk，把这个Chunk加入qinit中
+    // 升格：Chunk被使用了，随着内存的使用不断地增高，逐步的升级到maxUsage,则升级到下一个PoolChunkList。。最终会升格到q100中
+    // 降格：Chunk可用空间小于PoolChunkList.minUsage,逐步降级。最终降级到q000中，如果使用率为0 则会被内存资源被释放。
     // Method must be called inside synchronized(this) { ... } block
     private void allocateNormal(PooledByteBuf<T> buf, int reqCapacity, int normCapacity) {
+        // 先从已有的PoolChunkList中寻找一下，看有无合适的(满足reqCapacity的)
         if (q050.allocate(buf, reqCapacity, normCapacity) || q025.allocate(buf, reqCapacity, normCapacity) ||
             q000.allocate(buf, reqCapacity, normCapacity) || qInit.allocate(buf, reqCapacity, normCapacity) ||
             q075.allocate(buf, reqCapacity, normCapacity)) {
             return;
         }
 
+        // 如果在上述 PoolChunkList中 都没有找打对应的Chunk才会创建一个新的Chunk
         // Add a new chunk.
         PoolChunk<T> c = newChunk(pageSize, maxOrder, pageShifts, chunkSize);
         boolean success = c.allocate(buf, reqCapacity, normCapacity);
         assert success;
+
+        // 新创建的Chunk 一定是放置在qinit
         qInit.add(c);
     }
 

@@ -22,6 +22,11 @@ final class PoolSubpage<T> implements PoolSubpageMetric {
     private final int memoryMapIdx;
     private final int runOffset;
     private final int pageSize;
+
+    // 用于体现 当这个PoolSubPage 所划分的若干个小空间 到底哪一块空间被占用，哪一块空间没有被占用
+    // 此数组长度默认固定为8
+    // long -- 8字节 -- 64位 | long bit 表现形式 0000000000(63)1
+    // 该数组长度为8， 可以表达512种情况 | 512 能对应 最小的内存划分16B单元情况下 8K 划分了 512块
     private final long[] bitmap;
 
     PoolSubpage<T> prev;

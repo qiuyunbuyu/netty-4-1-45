@@ -21,6 +21,13 @@ import java.util.ArrayDeque;
 import java.util.Deque;
 
 /**
+ * 1. Netty申请内存的最小单位 16MB
+ * 2. 刚创建PoolChunk存储qInit,后续会根据他的使用情况，在不同的PoolChunkList中移动。
+ *     qinit 0 不会被回收， q000 0 会被回收的
+ *
+ * 3. 划分成2048个 Page  Page每一个8k
+ *     按 8k 16k 32k 64k ..... 16MB规格来申请  9k空间 ---》 16k空间
+ *
  * Description of algorithm for PageRun/PoolSubpage allocation from PoolChunk
  *
  * Notation: The following terms are important to understand the code
@@ -111,7 +118,21 @@ final class PoolChunk<T> implements PoolChunkMetric {
     final T memory;
     final boolean unpooled;
     final int offset;
+    // 伙伴算法的前提是需要一颗满二叉树[0层顶点16M .... 11层每个节点8K]
+    // 底层用了2个byte数组[memoryMap-depthMap] 管理 这课二叉树，完成对Page的管理
+
+    // memoryMap数组相关的特性
+    // - 不同于下面的depthMap -> memoryMap的index对应的value是会变化的
+    // - 虽然后续的value值会变化，但是初始值2者是一致的，即memoryMap[id] = depthMap[id] -> 也代表该节点没有被分配，这个内存空间可用
+    // - 规定memoryMap[id] = 12 -> 说明该节点及其子节点已经完全被分配，没有剩余空间
+    // - 子节点的memoryMap[id]对应value变化，会导致其父节点对应value变化 -> 递归的设置父节点的值，为2个子节点中的 小值
+    // - depthMap[id] < memoryMap[id]  -> 部分子节点空间已经被使用
     private final byte[] memoryMap;
+
+    // depthMap数组 给定编号 算层号
+    //    deptMap[1024] = 10 deptMap[1025] = 10
+    //    deptMap[2048] = 11
+    //    deptMap他的index以及Value永远不变
     private final byte[] depthMap;
     private final PoolSubpage<T>[] subpages;
     /** Used to determine if the requested capacity is equal to or greater than pageSize. */
