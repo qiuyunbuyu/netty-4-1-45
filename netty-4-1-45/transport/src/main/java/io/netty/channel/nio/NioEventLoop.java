@@ -464,6 +464,12 @@ public final class NioEventLoop extends SingleThreadEventLoop {
      * 其实还是Netty的定位是啥 -> 异步事件驱动的网络应用框架
      * 本质是让用户专注自己的业务处理逻辑
      * 如果用户有 [普通任务/定时任务] 的需求，也不要自己随便起线程，而是使用Netty包装的EventLoop来统一管理线程+管理异步处理任务
+     *
+     * ---
+     * 无锁串行化的执行思路
+     * 1. 每新建一个 Channel， 只选择一个 NioEventLoop 与其绑定
+     * 2. Channel 生命周期的所有事件处理都是线程独立的，不同的 NioEventLoop 线程之间不会发生任何交集，整个流程是线程安全的
+     * 3. 缺陷就是不能执行时间过长的 I/O 操作，一旦某个 I/O 事件发生阻塞，那么后续的所有 I/O 事件都无法执行，甚至造成事件积压
      */
     @Override
     protected void run() {

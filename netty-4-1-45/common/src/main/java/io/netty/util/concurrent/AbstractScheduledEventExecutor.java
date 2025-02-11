@@ -43,7 +43,7 @@ public abstract class AbstractScheduledEventExecutor extends AbstractEventExecut
        public void run() { } // Do nothing
     };
     // EventLoop父类
-    // 定时任务队列
+    // 定时任务队列：基于优先队列实现
     PriorityQueue<ScheduledFutureTask<?>> scheduledTaskQueue;
 
     long nextTaskId;
