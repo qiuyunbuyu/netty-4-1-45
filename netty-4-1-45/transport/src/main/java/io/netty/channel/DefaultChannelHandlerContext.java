@@ -18,7 +18,14 @@ package io.netty.channel;
 import io.netty.util.concurrent.EventExecutor;
 
 final class DefaultChannelHandlerContext extends AbstractChannelHandlerContext {
-
+    // DefaultChannelHandlerContext下包handler
+    // 为啥要多一层HandlerContext这一封装？
+    // 其实还是让handler专注于实现“特定所需”的业务逻辑
+    // 如果没有 ChannelHandlerContext 的这层封装，那么我们在做 ChannelHandler 之间传递的时候，前置后置的通用逻辑就要在每个 ChannelHandler 里都实现一份
+    // ---
+    // 核心思想就是：公共能力的抽取 + 特定能力的实现
+    // 特定：Handler负责实现”特定“能力
+    // 公共：HandlerContext提供”公共“方法负责调用Handler能力
     private final ChannelHandler handler;
 
     DefaultChannelHandlerContext(

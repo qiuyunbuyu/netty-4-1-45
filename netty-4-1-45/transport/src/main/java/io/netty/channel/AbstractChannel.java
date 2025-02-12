@@ -47,6 +47,7 @@ public abstract class AbstractChannel extends DefaultAttributeMap implements Cha
     private final Channel parent;
     private final ChannelId id;
     private final Unsafe unsafe;
+    // 是一个AbstractChannel有一个pipeline，而不是多个AbstractChannel共享一条pipeline
     private final DefaultChannelPipeline pipeline;
     private final VoidChannelPromise unsafeVoidPromise = new VoidChannelPromise(this, false);
     private final CloseFuture closeFuture = new CloseFuture(this);

@@ -1313,6 +1313,9 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+            // 如果前面的Handler没有捕捉异常，TailContext 提供了兜底的异常处理逻辑
+            // 最好还是在自定义处理器的末端添加统一的异常处理器：
+            // HeadContext ----- handler1 ---- handler2 ... exception handler --- TailContext
             onUnhandledInboundException(cause);
         }
 
@@ -1384,9 +1387,19 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
         @Override
         public void read(ChannelHandlerContext ctx) {
+            // HeadContext的 read 作为 入流量处理的起点
+            // 那么网络处理的起点是什么呢？
+
+            // "分channel设置关心的网络事件“
+            // 给ServerSocketChannel设置关心OP_ACCEPT
+            // selectionKey.interestOps(SelectionKey.OP_ACCEPT);
+
+            // 给SocketChannel设置关心OP_READ
+            // selectionKey.interestOps(SelectionKey.OP_READ);
             unsafe.beginRead();
         }
 
+        // HeadContext的 write/flush 同时作为 出流量处理的终点
         @Override
         public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
             unsafe.write(msg, promise);
