@@ -33,10 +33,12 @@ public class WorldClockServerHandler extends SimpleChannelInboundHandler<Locatio
 
     @Override
     public void channelRead0(ChannelHandlerContext ctx, Locations locations) throws Exception {
+        // 获取当前标准时间
         long currentTime = System.currentTimeMillis();
 
         LocalTimes.Builder builder = LocalTimes.newBuilder();
         for (Location l: locations.getLocationList()) {
+            // 根据时区转换标准时间 至”当地“时间
             TimeZone tz = TimeZone.getTimeZone(
                     toString(l.getContinent()) + '/' + l.getCity());
             Calendar calendar = getInstance(tz);
@@ -51,7 +53,7 @@ public class WorldClockServerHandler extends SimpleChannelInboundHandler<Locatio
                     setMinute(calendar.get(MINUTE)).
                     setSecond(calendar.get(SECOND)).build());
         }
-
+        // builder.build()是LocalTimes对应的java对象，后续会再经历反序列化 + 打Length长度的过程
         ctx.write(builder.build());
     }
 

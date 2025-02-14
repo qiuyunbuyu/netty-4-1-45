@@ -38,13 +38,17 @@ public class WorldClockServerInitializer extends ChannelInitializer<SocketChanne
         if (sslCtx != null) {
             p.addLast(sslCtx.newHandler(ch.alloc()));
         }
-
+        // Client: InHandler1
         p.addLast(new ProtobufVarint32FrameDecoder());
+        // Client: InHandler2
         p.addLast(new ProtobufDecoder(WorldClockProtocol.Locations.getDefaultInstance()));
 
+        //Client: OutHandler2
         p.addLast(new ProtobufVarint32LengthFieldPrepender());
+        //Client: OutHandler1
         p.addLast(new ProtobufEncoder());
 
+        // Client: InHandler3
         p.addLast(new WorldClockServerHandler());
     }
 }

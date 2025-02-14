@@ -45,15 +45,29 @@ public class WorldClockClientHandler extends SimpleChannelInboundHandler<LocalTi
     }
 
     public List<String> getLocalTimes(Collection<String> cities) {
-        Locations.Builder builder = Locations.newBuilder();
 
+        Locations.Builder builder = Locations.newBuilder();
+        // 洲/城市列表：Asia/Seoul,Europe/Berlin,America/Los_Angeles
         for (String c: cities) {
             String[] components = DELIM.split(c);
             builder.addLocation(Location.newBuilder().
-                setContinent(Continent.valueOf(components[0].toUpperCase())).
-                setCity(components[1]).build());
+                setContinent(Continent.valueOf(components[0].toUpperCase())). // 洲
+                setCity(components[1]).build()); // 城市
         }
 
+        // builder.build() 返回的是一个Java对象：WorldClockProtocol.Locations
+        // location {
+        //  continent: ASIA
+        //  city: "Seoul"
+        //  }
+        //location {
+        //  continent: EUROPE
+        //  city: "Berlin"
+        //  }
+        //location {
+        //  continent: AMERICA
+        //  city: "Los_Angeles"
+        //  }
         channel.writeAndFlush(builder.build());
 
         LocalTimes localTimes;

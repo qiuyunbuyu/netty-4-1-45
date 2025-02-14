@@ -64,6 +64,9 @@ public class ProtobufEncoder extends MessageToMessageEncoder<MessageLiteOrBuilde
     protected void encode(ChannelHandlerContext ctx, MessageLiteOrBuilder msg, List<Object> out)
             throws Exception {
         if (msg instanceof MessageLite) {
+            // ((MessageLite) msg).toByteArray())：完成序列化的地方
+            // protobuf-java对象 -> byte[]
+            // 官方案例中 WorldClockProtocol.Locations 这一java对象按照protobuf的规则序列化成了一串byte
             out.add(wrappedBuffer(((MessageLite) msg).toByteArray()));
             return;
         }

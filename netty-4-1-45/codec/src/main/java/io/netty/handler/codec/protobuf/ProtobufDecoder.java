@@ -86,6 +86,7 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
 
     /**
      * Creates a new instance.
+     * 使用Netty提供的反序列化，需要显示指明MessageLite
      */
     public ProtobufDecoder(MessageLite prototype) {
         this(prototype, null);
@@ -103,6 +104,7 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out)
             throws Exception {
+        // protobuf-java对象反序列化需要的是byte[]，所以第一步就是从msg转换到byte[]
         final byte[] array;
         final int offset;
         final int length = msg.readableBytes();
@@ -114,6 +116,7 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
             offset = 0;
         }
 
+        // 从byte[]转换成 protobuf-java对象
         if (extensionRegistry == null) {
             if (HAS_PARSER) {
                 out.add(prototype.getParserForType().parseFrom(array, offset, length));

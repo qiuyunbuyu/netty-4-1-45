@@ -63,6 +63,7 @@ public final class WorldClockClient {
             WorldClockClientHandler handler = ch.pipeline().get(WorldClockClientHandler.class);
 
             // Request and get the response.
+            // 发送并阻塞至获取响应
             List<String> response = handler.getLocalTimes(CITIES);
 
             // Close the connection.
