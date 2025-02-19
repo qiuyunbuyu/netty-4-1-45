@@ -272,6 +272,8 @@ public abstract class ByteToMessageDecoder extends ChannelInboundHandlerAdapter 
      */
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+        // 这里要和MessageToByteEncoder结合起来看，因为MessageToByteEncoder默认转到的是ByteBuf
+        // 所以可以认为这里只接受ByteBuf消息
         if (msg instanceof ByteBuf) {
             // 1.
             // 存储 解码后的数据：list中的每一个元素 都是解码好的数据

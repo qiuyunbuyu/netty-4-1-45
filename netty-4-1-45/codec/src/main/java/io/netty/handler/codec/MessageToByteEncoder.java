@@ -27,6 +27,9 @@ import io.netty.util.internal.TypeParameterMatcher;
 
 
 /**
+ * 注释里面很好的说明了MessageToByteEncoder和MessageToMessageEncoder的区别
+ * MessageToByteEncoder: X -> ByteBuf
+ * MessageToMessageEncoder: X -> Y
  * {@link ChannelOutboundHandlerAdapter} which encodes message in a stream-like fashion from one message to an
  * {@link ByteBuf}.
  *
@@ -102,16 +105,19 @@ public abstract class MessageToByteEncoder<I> extends ChannelOutboundHandlerAdap
         // 然后继续找前一个Handler，然后继续调用其write..
         ByteBuf buf = null;
         try {
+            // 1. 消息类型是否匹配
             if (acceptOutboundMessage(msg)) {
                 @SuppressWarnings("unchecked")
                 I cast = (I) msg;
+                // 2. 分配 ByteBuf 资源
                 buf = allocateBuffer(ctx, cast, preferDirect);
                 try {
+                    // 3. 调用子类实现的 encode 方法完成数据编码，填充buf
                     encode(ctx, cast, buf);
                 } finally {
                     ReferenceCountUtil.release(cast);
                 }
-
+                //  4. buf填充完成后，向后传递write事件
                 if (buf.isReadable()) {
                     ctx.write(buf, promise);
                 } else {
