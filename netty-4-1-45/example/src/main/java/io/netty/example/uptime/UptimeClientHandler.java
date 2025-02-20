@@ -28,7 +28,7 @@ import java.util.concurrent.TimeUnit;
  * connection attempt getStatus.
  */
 @Sharable
-public class UptimeClientHandler extends SimpleChannelInboundHandler<Object> {
+public class UptimeClientHandler extends SimpleChannelInboundHandler<String> {
 
     long startTime = -1;
 
@@ -41,8 +41,9 @@ public class UptimeClientHandler extends SimpleChannelInboundHandler<Object> {
     }
 
     @Override
-    public void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+    public void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
         // Discard received data
+        println(msg);
     }
 
     @Override

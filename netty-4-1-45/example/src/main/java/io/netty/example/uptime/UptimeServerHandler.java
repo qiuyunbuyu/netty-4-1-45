@@ -18,12 +18,15 @@ package io.netty.example.uptime;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
+import io.netty.handler.timeout.IdleState;
+import io.netty.handler.timeout.IdleStateEvent;
 
 @Sharable
-public class UptimeServerHandler extends SimpleChannelInboundHandler<Object> {
+public class UptimeServerHandler extends SimpleChannelInboundHandler<String> {
     @Override
-    public void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
+    public void channelRead0(ChannelHandlerContext ctx, String msg) throws Exception {
         // discard
+        System.out.println(msg);
     }
 
     @Override
@@ -31,5 +34,19 @@ public class UptimeServerHandler extends SimpleChannelInboundHandler<Object> {
         // Close the connection when an exception is raised.
         cause.printStackTrace();
         ctx.close();
+    }
+
+    @Override
+    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+        if (!(evt instanceof IdleStateEvent)) {
+            return;
+        }
+
+        IdleStateEvent e = (IdleStateEvent) evt;
+        if (e.state() == IdleState.WRITER_IDLE) {
+            // The connection was OK but there was no traffic for last period.
+           ctx.writeAndFlush("Server HeartBeat");
+            System.out.println("send HeartBeat");
+        }
     }
 }

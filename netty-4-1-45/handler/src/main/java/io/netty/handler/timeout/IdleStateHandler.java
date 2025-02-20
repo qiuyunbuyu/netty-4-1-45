@@ -288,6 +288,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
     @Override
     public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
+        // 更新lastReadTime
         if ((readerIdleTimeNanos > 0 || allIdleTimeNanos > 0) && reading) {
             lastReadTime = ticksInNanos();
             reading = false;
@@ -299,12 +300,13 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
         // Allow writing with void promise if handler is only configured for read timeout events.
         if (writerIdleTimeNanos > 0 || allIdleTimeNanos > 0) {
+            // 需要检测write IDLE时，以回调的方式更新lastWriteTime
             ctx.write(msg, promise.unvoid()).addListener(writeListener);
         } else {
             ctx.write(msg, promise);
         }
     }
-
+    // IdeleStateHandler 初始化相关 Schedule 任务的地方
     private void initialize(ChannelHandlerContext ctx) {
         // Avoid the case where destroy() is called before scheduling timeouts.
         // See: https://github.com/netty/netty/issues/143
@@ -316,8 +318,9 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
         state = 1;
         initOutputChanged(ctx);
-
+        // 初始化 lastReadTime 和 lastWriteTime时间
         lastReadTime = lastWriteTime = ticksInNanos();
+        // 对应3类定时任务
         if (readerIdleTimeNanos > 0) {
             readerIdleTimeout = schedule(ctx, new ReaderIdleTimeoutTask(ctx),
                     readerIdleTimeNanos, TimeUnit.NANOSECONDS);
@@ -391,6 +394,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
      * @see #hasOutputChanged(ChannelHandlerContext, boolean)
      */
     private void initOutputChanged(ChannelHandlerContext ctx) {
+        // observeOutput为true的情况下，从出站缓冲区中记录下相关的信息
         if (observeOutput) {
             Channel channel = ctx.channel();
             Unsafe unsafe = channel.unsafe();
@@ -489,18 +493,22 @@ public class IdleStateHandler extends ChannelDuplexHandler {
         protected void run(ChannelHandlerContext ctx) {
             long nextDelay = readerIdleTimeNanos;
             if (!reading) {
+                // lastReadTime长期不更新 -> nextDelay <= 0 -> READER_IDLE
                 nextDelay -= ticksInNanos() - lastReadTime;
             }
-
+            // 读延时情况发生，readerIdleTimeNanos后再检测
             if (nextDelay <= 0) {
                 // Reader is idle - set a new timeout and notify the callback.
+                // 继续提交任务：readerIdleTimeNanos
                 readerIdleTimeout = schedule(ctx, this, readerIdleTimeNanos, TimeUnit.NANOSECONDS);
 
                 boolean first = firstReaderIdleEvent;
                 firstReaderIdleEvent = false;
 
                 try {
+                    // 创建READER_IDLE EVENT
                     IdleStateEvent event = newIdleStateEvent(IdleState.READER_IDLE, first);
+                    // fireUserEventTriggered
                     channelIdle(ctx, event);
                 } catch (Throwable t) {
                     ctx.fireExceptionCaught(t);
@@ -558,6 +566,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
 
             long nextDelay = allIdleTimeNanos;
             if (!reading) {
+                // ** Math.max(lastReadTime, lastWriteTime)
                 nextDelay -= ticksInNanos() - Math.max(lastReadTime, lastWriteTime);
             }
             if (nextDelay <= 0) {
